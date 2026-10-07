@@ -1,0 +1,297 @@
+// The web library's public API: the hand-written half of the declarations.
+//
+// Every object is a handle on an engine entity and every property is a reflected component
+// field, read from the engine on access and written to it on assignment; the library keeps
+// no copy of the world. The component types themselves (`Light`, `Camera`, ...) are in
+// components.d.ts, which imports the shared value types below.
+//
+// Conventions: left-handed, +X right, +Y up, +Z forward; meters; degrees for every angle in
+// this file (the component views keep the engine's radians); seconds for time steps.
+
+export * from './components.js';
+
+/** A reflected component, passed to `entity.get / set / add / remove / has`. */
+export interface ComponentType<T extends object = object> {
+    /** The reflected component name (`Light`). */
+    readonly name: string;
+    /** The engine's ComponentTypeId; null until an engine has been created. */
+    readonly typeId: bigint | null;
+    /** Type-only marker carrying the component's fields; never present at runtime. */
+    readonly __values?: T;
+}
+
+/** Marks a component every entity always has (`Transform`): it cannot be added or removed. */
+export interface NoAdd {
+    readonly noAdd: true;
+}
+
+/** A component `entity.add` and `entity.remove` accept. */
+export type AddableComponentType<T extends object = object> = ComponentType<T> & { readonly noAdd?: false };
+
+/**
+ * A live view of one component on one entity. Every property read calls into the engine and
+ * every assignment writes through to it; nothing is cached, so a change made by the engine
+ * (physics, animation, the sky) is what the next read returns. Tuple and object fields read
+ * as fresh values: assign the whole value to change them.
+ */
+export type ComponentView<T extends object> = T;
+
+/** A 3D vector value: meters for positions. */
+export interface Vec3 {
+    x: number;
+    y: number;
+    z: number;
+}
+
+/** A linear RGBA color, each channel 0..1 unless a field says otherwise. */
+export interface Color {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+}
+
+/** A reference to an asset by its GUID (32 lowercase hexadecimal digits). */
+export interface AssetRef {
+    readonly guid: string;
+}
+
+/** A plain 3D vector owned by the page (for example `OrbitControls.target`). */
+export declare class Vector3 implements Vec3 {
+    constructor(x?: number, y?: number, z?: number);
+    x: number;
+    y: number;
+    z: number;
+    set(x: number, y: number, z: number): this;
+    copy(v: Vec3): this;
+}
+
+/**
+ * A live vector inside a component: reading `x` reads the engine, assigning `x` writes it.
+ * `set` and `copy` write all three components in one engine call.
+ */
+export interface Vector3View extends Vec3 {
+    x: number;
+    y: number;
+    z: number;
+    set(x: number, y: number, z: number): this;
+    copy(v: Vec3): this;
+}
+
+/** A live rotation as Euler angles in degrees, the editor inspector's X, Y, Z convention. */
+export interface EulerView extends Vector3View {}
+
+/** A live unit quaternion (x, y, z, w). */
+export interface QuaternionView {
+    x: number;
+    y: number;
+    z: number;
+    w: number;
+    set(x: number, y: number, z: number, w: number): this;
+}
+
+/**
+ * The entity's Transform, local to its parent (world space for a root entity). Each
+ * property reads the engine's matrix on access; nothing is cached.
+ */
+export interface TransformView {
+    /** Meters. */
+    readonly position: Vector3View;
+    /** Degrees. */
+    readonly rotation: EulerView;
+    readonly quaternion: QuaternionView;
+    readonly scale: Vector3View;
+    /** The parent entity, or null for a root. Assigning reparents; null makes it a root. */
+    parent: Entity | null;
+    /** Rotates about the entity's own X axis by `degrees`. */
+    rotateX(degrees: number): this;
+    /** Rotates about the entity's own Y axis by `degrees`. */
+    rotateY(degrees: number): this;
+    /** Rotates about the entity's own Z axis by `degrees`. */
+    rotateZ(degrees: number): this;
+}
+
+/**
+ * An axis-aligned box in the entity's parent space, read from its LocalBounds at access.
+ * Hand-written: the box has no reflected kind, so the engine module reads it for the facade.
+ */
+export interface Bounds {
+    readonly center: Vector3;
+    readonly size: Vector3;
+    readonly min: Vector3;
+    readonly max: Vector3;
+}
+
+/** A handle on one engine entity. */
+export interface Entity {
+    /** The engine's entity id. */
+    readonly id: number;
+    /** The entity's name, or '' when it has none. */
+    readonly name: string;
+    readonly transform: TransformView;
+    /**
+     * The entity's LocalBounds transformed into its parent's space, or null when it has none.
+     */
+    readonly bounds: Bounds | null;
+    /** A live view of `component`, or undefined when the entity does not have it. */
+    get<T extends object>(component: ComponentType<T>): ComponentView<T> | undefined;
+    /**
+     * Adds `component` when the entity lacks it, then writes `values` over the engine's
+     * defaults (creates or updates). Unnamed fields keep their current values.
+     */
+    set<T extends object>(component: ComponentType<T>, values: Partial<T>): ComponentView<T>;
+    /** Adds `component` with the engine's defaults. Throws when the entity already has it; use `set` to update. */
+    add<T extends object>(component: AddableComponentType<T>): ComponentView<T>;
+    /** Removes `component`; does nothing when the entity lacks it. */
+    remove(component: AddableComponentType): void;
+    has(component: ComponentType): boolean;
+    /** Destroys the entity and its children. Using the handle afterwards throws. */
+    destroy(): void;
+}
+
+/** A loaded model's root entity: its bounds enclose the whole model. */
+export interface Model extends Entity {
+    readonly bounds: Bounds;
+}
+
+/** The sun: the directional light the sky drives. */
+export interface SunView {
+    readonly entity: Entity;
+    /** Lux on a surface facing the sun; 100 000 is a clear noon. */
+    intensity: number;
+    /** Linear RGB, 0..1. While the sky drives the sun's color, the sky overwrites this each frame. */
+    color: [number, number, number];
+    castsShadows: boolean;
+}
+
+/** The physical sky. The sun's direction follows from these fields. */
+export interface SkyView {
+    readonly entity: Entity;
+    /** Local solar time in hours, 0..24; 12 is solar noon. */
+    timeOfDay: number;
+    /** Degrees north (positive) or south of the equator, -90..90. */
+    latitude: number;
+    /** 1 = 1 January, 172 = 21 June, 355 = 21 December. */
+    dayOfYear: number;
+    /** Degrees clockwise seen from above where north points: 0 = +Z, 90 = +X. */
+    northHeading: number;
+}
+
+/** The engine's world. */
+export interface Scene {
+    /**
+     * Fetches a glTF or GLB model from a URL and instantiates it; resolves to the model's root
+     * entity, whose bounds enclose the whole model. Loads run one at a time: a second call
+     * waits for the first. Called from an `onFrame` callback, the load starts after that frame.
+     * The engine keeps running while a load fetches; the promise resolves on the first frame
+     * after the model is ready, and also completes before `engine.run()`. Each call places
+     * another copy of the model; a URL is fetched once, and later calls reuse what it loaded.
+     */
+    load(url: string): Promise<Model>;
+    /** Creates an empty entity with an identity transform. */
+    create(name?: string): Entity;
+    /** The camera the canvas renders from. */
+    readonly camera: Entity;
+    readonly sun: SunView;
+    readonly sky: SkyView;
+}
+
+/**
+ * Which engine build `Engine.create` loads. `'auto'` (the default): the threaded build when
+ * the page is cross-origin isolated, else the single-threaded one. `'single'`: the
+ * single-threaded build, which works on any host. `'multi'`: the threaded build, which needs a
+ * cross-origin isolated page (COOP/COEP headers or the service worker shim).
+ */
+export type ThreadsOption = 'auto' | 'single' | 'multi';
+
+export interface EngineOptions {
+    /** The canvas the engine draws into. Its CSS size is tracked; the drawing buffer follows it times devicePixelRatio. */
+    canvas: HTMLCanvasElement;
+    threads?: ThreadsOption;
+    /** URL of the folder holding opengine-core.st/mt.js and .wasm; defaults to the folder of the library's own module. */
+    coreUrl?: string;
+}
+
+/** The running engine. */
+export interface Engine {
+    readonly scene: Scene;
+    /**
+     * Starts ticking: once per animation frame while the tab is visible, every 33 ms while it
+     * is hidden.
+     */
+    run(): void;
+    /** Stops ticking; `run` resumes. */
+    pause(): void;
+    /**
+     * Calls `callback` once per frame before the engine's systems run, with the frame's time
+     * step in seconds. Returns a function that unsubscribes.
+     */
+    onFrame(callback: (dt: number) => void): () => void;
+    /** Re-reads the canvas size and devicePixelRatio. Called automatically when the canvas resizes. */
+    resize(): void;
+    /**
+     * Stops the engine and releases the GPU device and the module's memory; resolves when the
+     * engine is gone. Every handle throws from the moment it is called.
+     */
+    dispose(): Promise<void>;
+}
+
+export interface EngineStatic {
+    /**
+     * Loads the engine module, brings up WebGPU on the canvas and creates a world with a
+     * camera, a sun and a sky. Rejects when the browser has no WebGPU, and when the library
+     * and the engine module come from different releases.
+     */
+    create(options: EngineOptions): Promise<Engine>;
+}
+export declare const Engine: EngineStatic;
+
+/** Mouse orbit, zoom and pan around a target, written into a camera entity's transform. */
+export interface OrbitControls {
+    /** The point the camera orbits and looks at. */
+    readonly target: Vector3;
+    /** Meters from the target. */
+    distance: number;
+    /** Meters. */
+    minDistance: number;
+    /** Meters. */
+    maxDistance: number;
+    /** Smooths motion; on by default. */
+    enableDamping: boolean;
+    /** Fraction of the remaining motion applied per 1/60 s, 0..1. */
+    dampingFactor: number;
+    rotateSpeed: number;
+    zoomSpeed: number;
+    panSpeed: number;
+    /** Writes the camera's transform. Called every frame automatically; call it after changing a property by hand. */
+    update(dt?: number): void;
+    /** Removes the pointer and wheel listeners and stops updating. */
+    dispose(): void;
+}
+
+export interface OrbitControlsStatic {
+    /**
+     * Orbits `camera` with the pointer on `domElement`: left drag rotates, right drag or
+     * shift-drag pans, the wheel zooms. Starts from the camera's current position, orbiting
+     * the origin.
+     */
+    new (camera: Entity, domElement: HTMLElement): OrbitControls;
+}
+export declare const OrbitControls: OrbitControlsStatic;
+
+/**
+ * What went wrong, so a page can branch on it. `'NoWebGPU'`: the browser has no WebGPU.
+ * `'VersionMismatch'`: the library and the engine module are from different releases.
+ * `'Engine'`: the engine refused a call; the message is the engine's. `'CallOrder'`: a call
+ * broke the library's call order (for example a field write while the engine is starting).
+ * `'Disposed'`: the engine or the entity was disposed or destroyed. `'InvalidArgument'`: a
+ * component, field or value the engine does not have (a misspelled field, an unknown
+ * enumerator).
+ */
+export type OpenEngineErrorCode = 'NoWebGPU' | 'VersionMismatch' | 'Engine' | 'CallOrder' | 'Disposed' | 'InvalidArgument';
+
+/** Every error the library throws or rejects with. The message states the fix. */
+export declare class OpenEngineError extends Error {
+    constructor(code: OpenEngineErrorCode, message: string);
+    readonly code: OpenEngineErrorCode;
+}

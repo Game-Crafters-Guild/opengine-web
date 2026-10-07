@@ -1,0 +1,38 @@
+{
+  "name": "@openengine/web",
+  "version": "2026.10.0-alpha.1",
+  "description": "The engine on a web page: a WebGPU renderer and an ECS behind a small TypeScript API.",
+  "license": "MIT",
+  "type": "module",
+  "types": "./opengine.d.ts",
+  "exports": {
+    ".": {
+      "types": "./opengine.d.ts",
+      "default": "./opengine.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "coi-serviceworker.LICENSE",
+    "coi-serviceworker.js",
+    "components.d.ts",
+    "llms.txt",
+    "opengine-core-binding.js",
+    "opengine-core.gepak",
+    "opengine-core.mt.js",
+    "opengine-core.mt.wasm",
+    "opengine-core.st.js",
+    "opengine-core.st.wasm",
+    "opengine.d.ts",
+    "opengine.mjs",
+    "types/components.d.ts",
+    "examples/"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "tag": "alpha"
+  }
+}

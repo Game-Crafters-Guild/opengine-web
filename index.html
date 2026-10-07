@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@openengine/web examples</title>
+<style>
+html, body { margin: 0; background: #111; color: #eee; font: 15px/1.5 system-ui, sans-serif; }
+main { max-width: 760px; margin: 48px auto; padding: 0 24px; }
+a { color: #8cf; }
+li { margin: 12px 0; }
+.meta { color: #999; }
+</style>
+</head>
+<body>
+<main>
+<h1>@openengine/web examples</h1>
+<p>A WebGPU renderer and an entity-component world behind a small JavaScript API. Each example is one page: its engine calls in <code>main.js</code>, its controls in a script beside it. They need a browser with WebGPU: current Chrome or Edge.</p>
+<ul>
+<li><a href="package/examples/model-viewer/index.html">Model viewer</a>: pick a sample model or open your own .glb, orbit it, set the time of day, stop or start the turntable, and show the frame rate.
+<span class="meta" data-lines="53" data-panel-lines="264">53 lines of engine calls in main.js; 264 lines of page and panel. Models: Khronos glTF Sample Assets, CC0 1.0. Early access (alpha).</span></li>
+</ul>
+<p class="meta">Every asset's source and license is listed in <a href="package/examples/ASSET_PROVENANCE.md">ASSET_PROVENANCE.md</a>. The pages load <code>coi-serviceworker.js</code> (MIT) to run the threaded build on hosts that cannot send isolation headers.</p>
+</main>
+</body>
+</html>

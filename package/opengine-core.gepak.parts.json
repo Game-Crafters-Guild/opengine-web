@@ -1,0 +1,15 @@
+{
+  "file": "opengine-core.gepak",
+  "bytes": 132385143,
+  "fnv1a64": "0xf61cd3212696033d",
+  "parts": [
+    {
+      "file": "opengine-core.gepak.part0",
+      "bytes": 99614720
+    },
+    {
+      "file": "opengine-core.gepak.part1",
+      "bytes": 32770423
+    }
+  ]
+}
