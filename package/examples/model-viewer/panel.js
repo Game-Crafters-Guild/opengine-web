@@ -1,11 +1,12 @@
 // The model viewer's control panel: the sample model list, opening or dropping a local file,
-// the time of day, the turntable switch, and a frame-rate readout toggled with F or its button.
+// the time of day, the turntable switch, a frame-rate readout toggled with F or its button, and
+// the download progress of the engine and of each model.
 // It calls back into the page (main.js) and never into the engine.
 // Models: Khronos glTF Sample Assets (sources and credits in ../ASSET_PROVENANCE.md):
 // https://github.com/KhronosGroup/glTF-Sample-Assets. The two helmets ship there as .gltf with
 // separate files; the demo site hosts single-file .glb copies of them under models/.
-// License: CC0 1.0 (the listed models). A model that needs a credit shows it, with links, while it
-// is on screen.
+// License: CC0 1.0, except the models credited in the list (CC BY 4.0; Damaged helmet also
+// CC BY-NC 4.0). A model that needs a credit shows it, with links, while it is on screen.
 // Needs: nothing beyond the page.
 
 const kSampleBase = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models';
@@ -13,11 +14,23 @@ const sample = (/** @type {string} */ file) => `${kSampleBase}/${file.replace(/\
 const onSite = (/** @type {string} */ file) => new URL(`../../../models/${file}`, import.meta.url).href;
 // A credit or a note is a list of [text, link?] pieces, shown while the model is on screen.
 const kOpaqueGlass = [['Its glass draws opaque: the importer does not read glass (transmission) yet.']];
+const kCcBy = ['CC BY 4.0', 'https://creativecommons.org/licenses/by/4.0/'];
+const kKhronos = 'https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models';
+const kFoxCredit = [['Fox', `${kKhronos}/Fox`], [': model © 2014 PixelMannen (CC0); rigging and animation © 2014 tomkranis, '],
+    kCcBy, ['; glTF conversion © 2017 @AsoboStudio and @scurest, '], kCcBy, ['.']];
+const kTruckCredit = [['Cesium Milk Truck', `${kKhronos}/CesiumMilkTruck`], [': © 2017 Cesium, '], kCcBy, ['.']];
+const kCcByNc = ['CC BY-NC 4.0', 'https://creativecommons.org/licenses/by-nc/4.0/'];
+const kDamagedHelmetCredit = [['Damaged Helmet', `${kKhronos}/DamagedHelmet`], [': © 2018 ctxwing, '], kCcBy,
+    ['; © 2016 theblueturtle_, '], kCcByNc, [' (non-commercial).']];
+const kChessCredit = [['A Beautiful Game', `${kKhronos}/ABeautifulGame`], [': © 2020 ASWF and © 2022 Ed Mackey, '],
+    kCcBy, ['.']];
 /** [name, url, megabytes of the download (shown in the list and while it loads), credit or note shown with the model] */
 const kSamples = [
     ['Water bottle', sample('WaterBottle.glb'), 9],
     ['SciFi helmet', onSite('SciFiHelmet.glb'), 30],
     ['Flight helmet', onSite('FlightHelmet.glb'), 48, kOpaqueGlass],
+    ['Damaged helmet', sample('DamagedHelmet.glb'), 4, kDamagedHelmetCredit],
+    ['Chess set', sample('ABeautifulGame.glb'), 43, [...kChessCredit, [' '], ...kOpaqueGlass]],
     ['Lantern', sample('Lantern.glb'), 0, kOpaqueGlass],
     ['Antique camera', sample('AntiqueCamera.glb')],
     ['Boom box', sample('BoomBox.glb')],
@@ -25,6 +38,8 @@ const kSamples = [
     ['Avocado', sample('Avocado.glb')],
     ['Barramundi fish', sample('BarramundiFish.glb')],
     ['Metal and roughness spheres', sample('MetalRoughSpheresNoTextures.glb')],
+    ['Fox', sample('Fox.glb'), 0, kFoxCredit],
+    ['Cesium milk truck', sample('CesiumMilkTruck.glb'), 0, kTruckCredit],
 ];
 // The engine fetches one file per model, so a .gltf must embed its buffers and images; FBX has
 // no importer on the web.
@@ -53,6 +68,52 @@ class FrameMeter {
         const worst = Math.max(...this.frames) * 1000;
         this.readout.textContent = `${(this.frames.length / span).toFixed(0)} fps · worst ${worst.toFixed(1)} ms`;
     }
+}
+
+/**
+ * Shows `text` as the status: in the panel, over the canvas until its first frame draws, and,
+ * while a download runs (`downloading`), beside the panel's title, where a closed panel shows it.
+ * @param {string} text @param {boolean} [downloading]
+ */
+export function setStatus(text, downloading = false) {
+    /** @type {HTMLOutputElement} */ (document.querySelector('.panel output[name=status]')).value = text;
+    /** @type {HTMLElement} */ (document.querySelector('.canvas-status')).textContent = text;
+    /** @type {HTMLElement} */ (document.querySelector('.panel .summary-progress')).textContent = downloading ? `· ${text}` : '';
+}
+
+/**
+ * An onProgress for a download (the engine's, or a model's) that shows "Loading <label> 37%"
+ * as the status and fills the bar along the page's top edge from empty; the engine's phases add
+ * up. A percentage, not megabytes: the bytes are the network's only when the host sends their
+ * length. The bar runs without a value while a size is unknown, and once every byte is in when
+ * the status then says `whenDownloaded` (work that follows the download, of unknown length).
+ * @param {string} label @param {string} [whenDownloaded]
+ */
+export function downloadProgress(label, whenDownloaded) {
+    const bar = /** @type {HTMLProgressElement} */ (document.querySelector('progress.download'));
+    bar.value = 0;
+    /** @type {Map<string, { loaded: number, total: number }>} */
+    const phases = new Map();
+    return (/** @type {import('@openengine/web').LoadProgress} */ { phase, loaded, total }) => {
+        phases.set(phase, { loaded, total });
+        const all = [...phases.values()];
+        bar.hidden = false;
+        if (all.some((one) => !one.total)) {
+            bar.removeAttribute('value');
+            setStatus(`Loading ${label}...`, true);
+            return;
+        }
+        const sum = all.reduce((sum, one) => ({ loaded: sum.loaded + one.loaded, total: sum.total + one.total }));
+        if (sum.loaded === sum.total && whenDownloaded) {
+            bar.removeAttribute('value');
+            setStatus(whenDownloaded, true);
+            return;
+        }
+        const percent = `${Math.floor((100 * sum.loaded) / sum.total)}%`;
+        bar.max = sum.total;
+        bar.value = sum.loaded;
+        setStatus(`Loading ${label} ${percent}`, true);
+    };
 }
 
 /**
@@ -94,7 +155,7 @@ function writePieces(element, pieces) {
 
 /**
  * @param {Document} page
- * @param {{ show: (url: string) => Promise<void>, timeOfDay: number, setTimeOfDay: (hours: number) => void,
+ * @param {{ show: (url: string, onProgress: (progress: import('@openengine/web').LoadProgress) => void) => Promise<void>, timeOfDay: number, setTimeOfDay: (hours: number) => void,
  *     setTurning: (on: boolean) => void }} callbacks
  */
 export function controlPanel(page, { show, timeOfDay, setTimeOfDay, setTurning }) {
@@ -102,6 +163,9 @@ export function controlPanel(page, { show, timeOfDay, setTimeOfDay, setTurning }
     const [list, file, slider, timeOutput, fpsButton, status] =
         ['model', 'file', 'time', 'clock', 'fps', 'status'].map(field);
     const credit = /** @type {HTMLElement} */ (page.querySelector('.panel .credit'));
+    const bar = /** @type {HTMLProgressElement} */ (page.querySelector('progress.download'));
+    const summaryProgress = /** @type {HTMLElement} */ (page.querySelector('.panel .summary-progress'));
+    const canvasStatus = /** @type {HTMLElement} */ (page.querySelector('.canvas-status'));
     const readout = /** @type {HTMLElement} */ (page.querySelector('.fps'));
     const meter = new FrameMeter(readout);
 
@@ -112,7 +176,7 @@ export function controlPanel(page, { show, timeOfDay, setTimeOfDay, setTurning }
         megabytes = 0) => {
         status.value = megabytes ? `Loading ${label} (${megabytes} MB)...` : `Loading ${label}...`;
         try {
-            await show(url);
+            await show(url, downloadProgress(label));
             shown = label;
             status.value = `Showing ${label}`;
             writePieces(credit, credited);
@@ -120,6 +184,9 @@ export function controlPanel(page, { show, timeOfDay, setTimeOfDay, setTurning }
         } catch (error) {
             status.value = `Could not load ${label}: ${error instanceof Error ? error.message : error}`;
             return false;
+        } finally {
+            bar.hidden = true;
+            summaryProgress.textContent = '';
         }
     };
     // A local file reaches the engine as an object URL; its name after '#' picks the loader.
@@ -192,9 +259,12 @@ export function controlPanel(page, { show, timeOfDay, setTimeOfDay, setTurning }
     });
     setTime(timeOfDay);
     for (const control of [list, file, slider, turntable, fpsButton]) control.disabled = false;
+    pick();   // the first model; the page runs the engine meanwhile
 
     return {
-        ready: pick(),
-        frame: (/** @type {number} */ dt) => meter.add(dt),
+        frame: (/** @type {number} */ dt) => {
+            canvasStatus.hidden = true;   // the canvas draws from here on
+            meter.add(dt);
+        },
     };
 }

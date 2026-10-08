@@ -63,23 +63,36 @@ function fnvHex(hash) {
     return '0x' + [...hash].reverse().map((limb) => limb.toString(16).padStart(4, '0')).join('');
 }
 
+/** Hands a phase's responses back as they are: the facade passes a tracker that reports progress. */
+const untracked = (phase, files) => files.map((file) => file.response);
+
 /**
- * The engine pack, when the folder serves it as parts (a host that refuses large files): the
- * index beside the glue, opengine-core.gepak.parts.json, lists them in order with each part's
- * size, and the whole pack's size and FNV-1a 64. Fetches the parts, checks every one against the
- * index, and joins them into one Blob whose object URL stands in for opengine-core.gepak; null
- * when the folder serves the pack whole.
+ * The engine pack's parts, when the folder serves it as parts (a host that refuses large files):
+ * the index beside the glue, opengine-core.gepak.parts.json, lists them in order with each part's
+ * size, and the whole pack's size and FNV-1a 64. Resolves once every part's response has
+ * started, to the index and the responses; null when the folder serves the pack whole.
  */
-export async function joinEnginePack(base) {
-    const index = await fetch(new URL('opengine-core.gepak.parts.json', base));
-    if (!index.ok)
+async function requestPackParts(base) {
+    const response = await fetch(new URL('opengine-core.gepak.parts.json', base));
+    if (!response.ok)
         return null;
-    const { parts, bytes, fnv1a64: expected } = await index.json();
-    const contents = await Promise.all(parts.map(async ({ file, bytes: size }) => {
-        const response = await fetch(new URL(file, base));
-        if (!response.ok)
-            throw new Error(`Could not fetch ${file} of the engine pack from ${base}: HTTP ${response.status}.`);
-        const content = new Uint8Array(await response.arrayBuffer());
+    const index = await response.json();
+    const responses = await Promise.all(index.parts.map(async ({ file }) => {
+        const part = await fetch(new URL(file, base));
+        if (!part.ok)
+            throw new Error(`Could not fetch ${file} of the engine pack from ${base}: HTTP ${part.status}.`);
+        return part;
+    }));
+    return { index, responses };
+}
+
+/**
+ * Reads the parts, checks every one against the index, and joins them into one Blob whose object
+ * URL stands in for opengine-core.gepak.
+ */
+async function joinPackParts({ parts, bytes, fnv1a64: expected }, responses) {
+    const contents = await Promise.all(parts.map(async ({ file, bytes: size }, i) => {
+        const content = new Uint8Array(await responses[i].arrayBuffer());
         if (content.length !== size)
             throw new Error(`${file} of the engine pack is ${content.length} bytes; the index says ${size}. Serve the parts the index was written with.`);
         return content;
@@ -93,19 +106,64 @@ export async function joinEnginePack(base) {
     return URL.createObjectURL(new Blob(contents));
 }
 
-/** Loads the `build` ('st' or 'mt') engine module from `coreUrl` on `canvas`. */
-export async function loadCore({ build, coreUrl, canvas }) {
+/** A phase's tracked files for the parts' responses: each part's size is its index entry's. */
+function trackPackParts({ index, responses }, track) {
+    return track('pack', responses.map((response, i) => ({ response, decodedBytes: index.parts[i].bytes })));
+}
+
+/**
+ * The engine pack joined from its parts (requestPackParts), its download reported through
+ * `track` in the 'pack' phase; null when the folder serves the pack whole.
+ */
+export async function joinEnginePack(base, track = untracked) {
+    const parts = await requestPackParts(base);
+    return parts && joinPackParts(parts.index, trackPackParts(parts, track));
+}
+
+/** Compiles the module from `response` as it downloads. */
+function instantiateStreaming(response, imports) {
+    // The server's content type may not be application/wasm, which streaming compilation needs.
+    return WebAssembly.instantiateStreaming(new Response(response.body, { headers: { 'Content-Type': 'application/wasm' } }), imports);
+}
+
+/**
+ * Loads the `build` ('st' or 'mt') engine module from `coreUrl` on `canvas`. The module and the
+ * pack's parts download side by side, reported through `track` in the 'wasm' and 'pack' phases
+ * once both have started; `wasmBytes` is the wasm file's size, which counts a compressed
+ * response in its compressed bytes.
+ */
+export async function loadCore({ build, coreUrl, canvas, wasmBytes, track = untracked }) {
     const base = new URL(coreUrl, globalThis.location?.href);
-    const packUrl = await joinEnginePack(base);
+    const wasmFile = `opengine-core.${build}.wasm`;
+    const [wasmResponse, parts] = await Promise.all([
+        fetch(new URL(wasmFile, base), { credentials: 'same-origin' }),
+        requestPackParts(base),
+    ]);
+    if (!wasmResponse.ok)
+        throw new Error(`Could not fetch ${wasmFile} from ${base}: HTTP ${wasmResponse.status}.`);
+    const packResponses = parts && trackPackParts(parts, track);
+    const [wasm] = track('wasm', [{ response: wasmResponse, decodedBytes: wasmBytes }]);
     const glue = new URL(`opengine-core.${build}.js`, base).href;
     const { default: createOpenEngine } = await import(glue);
-    const module = await createOpenEngine({
-        canvas,
-        // The wasm binary, the engine pack and the threaded build's worker script all sit beside
-        // the glue, wherever the page itself is served from; a pack served as parts is the
-        // joined Blob.
-        locateFile: (path) => (path === 'opengine-core.gepak' && packUrl) || new URL(path, base).href,
-    });
+    // The glue waits on instantiateWasm's callback alone: a failed compile rejects through here.
+    let failInstantiation;
+    const instantiationFailed = new Promise((_, reject) => { failInstantiation = reject; });
+    let packUrl = null;
+    const [module, joined] = await Promise.all([
+        Promise.race([instantiationFailed, createOpenEngine({
+            canvas,
+            // The engine pack and the threaded build's worker script sit beside the glue, wherever
+            // the page itself is served from; a pack served as parts is the joined Blob, which
+            // the module fetches in ge_create.
+            locateFile: (path) => (path === 'opengine-core.gepak' && packUrl) || new URL(path, base).href,
+            instantiateWasm(imports, receive) {
+                instantiateStreaming(wasm, imports).then(({ instance, module: compiled }) => receive(instance, compiled), failInstantiation);
+                return {};
+            },
+        })]),
+        parts && joinPackParts(parts.index, packResponses),
+    ]);
+    packUrl = joined;
     const abi = adaptModule(module);
     if (!packUrl)
         return abi;

@@ -3,7 +3,7 @@
 Live examples and builds of `@openengine/web`: a WebGPU renderer (clustered lighting, cascaded shadows, a physical sky) and an entity-component world behind a small JavaScript API, running in the browser.
 
 - **The examples**: https://game-crafters-guild.github.io/opengine-web/. They need WebGPU: use a current Chrome or Edge.
-- **Early access (alpha)**: the engine and its API change between releases; this site serves `@openengine/web` 2026.10.0-alpha.1.
+- **Early access (alpha)**: the engine and its API change between releases; this site serves `@openengine/web` 2026.10.0-alpha.2, built from engine commit 498b07e07d.
 - **The package**: `package/` holds the library as a page imports it:
   - `opengine.mjs`, its declarations and `types/`;
   - the engine module in two builds, `opengine-core.st` (single-threaded) and `opengine-core.mt` (threaded);
@@ -24,4 +24,4 @@ Live examples and builds of `@openengine/web`: a WebGPU renderer (clustered ligh
 - Example content: every model the pages load is listed with its source and license in `package/examples/ASSET_PROVENANCE.md`.
   - The Khronos glTF Sample Assets models (CC0 1.0) are loaded by URL from their source.
   - The two helmets in `models/` (CC0 1.0) are single-file copies made for this site; how they were made is recorded in the same file.
-  - Every model the page lists today is CC0 1.0. Two attribution-licensed models are held out of the list for this release; their credits are recorded in `package/examples/ASSET_PROVENANCE.md` and return to the page with them.
+  - Most models the page lists are CC0 1.0. The attribution-licensed ones (CC BY 4.0, and the Damaged Helmet also CC BY-NC 4.0, non-commercial) show their credits on the page while they are on screen; the credits are recorded in `package/examples/ASSET_PROVENANCE.md`.

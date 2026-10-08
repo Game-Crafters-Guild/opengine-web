@@ -1559,6 +1559,7 @@ export interface ShadowSettingsEffect {
     rayTracedQuality: RayTracedShadowQuality;
     filter: DirectionalShadowFilter;
     maxShadowDistance: number;
+    distanceFadeFraction: number;
     splitLambda: number;
     depthBias: number;
     normalBias: number;

@@ -1,17 +1,16 @@
 // A model viewer: pick a sample model or open your own .glb, orbit it (drag to orbit,
 // right-drag to pan, wheel to zoom), and set the time of day. The panel is panel.js.
 // Models: Khronos glTF Sample Assets, listed in panel.js and ../ASSET_PROVENANCE.md.
-// License: CC0 1.0 (the listed models); MIT (coi-serviceworker.js).
+// License: CC0 1.0, CC BY 4.0 and CC BY-NC 4.0 (the listed models, credited on screen); MIT (coi-serviceworker.js).
 // Needs: WebGPU; @openengine/web; coi-serviceworker.js beside the engine module for the threaded build.
 import { Camera, Engine, OrbitControls } from '@openengine/web';
-import { controlPanel, freeArea } from './panel.js';
+import { controlPanel, downloadProgress, freeArea, setStatus } from './panel.js';
 
 const found = document.querySelector('canvas');
-const status = document.querySelector('.panel output[name=status]');
-if (!found || !status) throw new Error('The page needs a <canvas> and the panel.');
+if (!found) throw new Error('The page needs a <canvas>.');
 const canvas = found;
-const engine = await Engine.create({ canvas, threads: 'auto' }).catch((error) => {
-    status.textContent = error.message;   // the facade's own text names what to do (no WebGPU, ...)
+const engine = await Engine.create({ canvas, threads: 'auto', onProgress: downloadProgress('the engine', 'Starting the engine...') }).catch((error) => {
+    setStatus(error.message);   // the facade's own text names what to do (no WebGPU, ...)
     throw error;
 });
 const { scene } = engine;
@@ -21,9 +20,12 @@ let model = null;
 let turning = true;
 globalThis.viewer = { engine, controls, model: () => model };   // for the browser console
 
-/** Shows the model at `url` in place of the current one, sized to the area the panel leaves free. @param {string} url */
-async function show(url) {
-    const next = await scene.load(url);
+/**
+ * Shows the model at `url` in place of the current one, sized to the area the panel leaves free.
+ * @param {string} url @param {(progress: import('@openengine/web').LoadProgress) => void} onProgress
+ */
+async function show(url, onProgress) {
+    const next = await scene.load(url, { onProgress });
     model?.destroy();
     model = next;
     const { center, size } = model.bounds;
@@ -46,8 +48,7 @@ const panel = controlPanel(document, {
     setTurning: (on) => { turning = on; },
 });
 engine.onFrame((dt) => {
-    if (turning) model?.transform.rotateY(10 * dt);
+    if (turning) model?.transform.rotateWorldY(10 * dt);
     panel.frame(dt);
 });
-await panel.ready;
-engine.run();
+engine.run();   // the sky draws while the first model downloads

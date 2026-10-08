@@ -103,12 +103,21 @@ export interface TransformView {
     readonly scale: Vector3View;
     /** The parent entity, or null for a root. Assigning reparents; null makes it a root. */
     parent: Entity | null;
-    /** Rotates about the entity's own X axis by `degrees`. */
+    /** Rotates about the entity's own X axis by `degrees`; a positive turn takes +Y toward +Z. */
     rotateX(degrees: number): this;
-    /** Rotates about the entity's own Y axis by `degrees`. */
+    /** Rotates about the entity's own Y axis by `degrees`; a positive turn takes +Z toward +X. */
     rotateY(degrees: number): this;
-    /** Rotates about the entity's own Z axis by `degrees`. */
+    /** Rotates about the entity's own Z axis by `degrees`; a positive turn takes +X toward +Y. */
     rotateZ(degrees: number): this;
+    /**
+     * Rotates about the world's up axis (+Y) through the entity's position by `degrees`, whatever
+     * the entity's own rotation and its parents' rotations and mirroring: a turntable or a
+     * character's yaw. A positive turn takes +Z toward +X, clockwise seen from above. Under a
+     * parent with non-uniform scale the entity stays unsheared, so the turn is close to, not
+     * exactly, a turn about world up. Under a parent scaled to zero or flattened (a zero scale
+     * on any axis) the turn does nothing.
+     */
+    rotateWorldY(degrees: number): this;
 }
 
 /**
@@ -186,8 +195,10 @@ export interface Scene {
      * The engine keeps running while a load fetches; the promise resolves on the first frame
      * after the model is ready, and also completes before `engine.run()`. Each call places
      * another copy of the model; a URL is fetched once, and later calls reuse what it loaded.
+     * `options.onProgress` reports the file's download in the `'model'` phase; a URL already
+     * loaded reports nothing.
      */
-    load(url: string): Promise<Model>;
+    load(url: string, options?: LoadOptions): Promise<Model>;
     /** Creates an empty entity with an identity transform. */
     create(name?: string): Entity;
     /** The camera the canvas renders from. */
@@ -210,6 +221,36 @@ export interface EngineOptions {
     threads?: ThreadsOption;
     /** URL of the folder holding opengine-core.st/mt.js and .wasm; defaults to the folder of the library's own module. */
     coreUrl?: string;
+    /**
+     * Reports the engine's download while `Engine.create` runs: the `'pack'` phase (the engine
+     * pack, when the folder serves it as parts) and the `'wasm'` phase (the engine module).
+     * Both phases report their first progress, with `loaded` 0 and their totals, before either
+     * reports bytes, so a page can add them up from the start (the package knows its own
+     * files' sizes, so these phases always have a total).
+     */
+    onProgress?: (progress: LoadProgress) => void;
+}
+
+/** What a download is fetching: the engine pack, the engine module, or a model. */
+export type LoadPhase = 'pack' | 'wasm' | 'model';
+
+/**
+ * A download's progress in bytes: network bytes when the server sends Content-Length (a file
+ * it compresses counts its compressed size), otherwise the file's decompressed bytes.
+ * `loaded / total` is the fraction done either way; show it as a percentage, since the bytes
+ * are not always the network's. `total` is 0 while a phase's size is unknown: a compressed
+ * model, whose decompressed size the library cannot know beforehand, has none until it has
+ * arrived. `loaded` never decreases, and a phase's last report has `loaded` equal to `total`.
+ */
+export interface LoadProgress {
+    phase: LoadPhase;
+    loaded: number;
+    total: number;
+}
+
+export interface LoadOptions {
+    /** Reports the model's download in the `'model'` phase. */
+    onProgress?: (progress: LoadProgress) => void;
 }
 
 /** The running engine. */

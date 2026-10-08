@@ -10,11 +10,12 @@ Write pages as one HTML file with a `<canvas>` and a `<script type="module">`. U
 
 - `await Engine.create({ canvas })` before anything else; `engine.scene` is the world.
 - `await scene.load(url)` returns the model's root entity; `entity.bounds.center` and `.size` frame it.
-- Units: meters; degrees for `transform.rotation`, `rotateX/Y/Z`, `OrbitControls`; lux for `scene.sun.intensity` (100000 = clear noon); hours for `scene.sky.timeOfDay`; seconds for `dt`.
+- Units: meters; degrees for `transform.rotation`, `rotateX/Y/Z` (own axes), `rotateWorldY` (world up through the entity's position; exact under parents of uniform scale; nothing under a parent scaled to zero or flattened), a positive turn taking +Y toward +Z, +Z toward +X (clockwise seen from above) and +X toward +Y, `OrbitControls`; lux for `scene.sun.intensity` (100000 = clear noon); hours for `scene.sky.timeOfDay`; seconds for `dt`.
 - Axes: left-handed, +X right, +Y up, +Z forward; cameras and lights look along their entity's +Z.
 - Components: `entity.set(Light, { type: 'Point', intensity: 800 })` adds or updates; `entity.get(Light)` returns a live view or `undefined`; `entity.add`, `entity.remove`, `entity.has`. Field names are camelCase (`intensity`, `fovY`, `timeOfDayHours`); enum fields take the enumerator name as a string; entity fields take an `Entity` or null; asset fields take `{ guid }`.
 - Animate in `engine.onFrame(dt => { ... })`, then call `engine.run()`. `OrbitControls` updates itself every frame.
 - Assets from another origin need CORS headers (Access-Control-Allow-Origin) under either build.
+- Progress: `Engine.create({ canvas, onProgress })` and `scene.load(url, { onProgress })` call `onProgress({ phase, loaded, total })` in bytes (network bytes with Content-Length, else decompressed): show `loaded / total` as a percentage; `total` is 0 while unknown; phases `'wasm'` and `'pack'` (the engine, reported together from the first call: add them up) and `'model'`.
 
 ## Example
 
@@ -28,7 +29,7 @@ const controls = new OrbitControls(engine.scene.camera, canvas);
 controls.target.copy(robot.bounds.center);
 engine.scene.sky.timeOfDay = 9.5;
 engine.scene.create('lamp').set(Light, { type: 'Point', intensity: 800 });
-engine.onFrame(dt => robot.transform.rotateY(20 * dt));
+engine.onFrame(dt => robot.transform.rotateWorldY(20 * dt));
 engine.run();
 ```
 

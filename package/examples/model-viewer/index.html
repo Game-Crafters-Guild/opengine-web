@@ -13,9 +13,13 @@
 <link rel="stylesheet" href="panel.css">
 </head>
 <body>
+<!-- The download bar along the top edge, and the status over the canvas until the first frame
+     draws: both show whatever the viewport and whether the panel is open. -->
+<progress class="download" hidden></progress>
 <canvas></canvas>
+<p class="canvas-status">Loading the engine...</p>
 <details class="panel" open>
-<summary>Model viewer</summary>
+<summary>Model viewer <span class="summary-progress"></span></summary>
 <p class="hint">Early access (alpha): the engine and its API change between releases.</p>
 <!-- The controls stay disabled until the engine starts (panel.js enables them). -->
 <label>Model <select name="model" disabled></select></label>
@@ -24,7 +28,7 @@
 <label>Time of day <output name="clock"></output><input type="range" name="time" min="6" max="18" step="0.05" title="6:00 to 18:00: the lit hours" disabled></label>
 <label class="check"><input type="checkbox" name="turn" checked disabled> Turntable</label>
 <button type="button" name="fps" disabled>Frame rate <kbd>F</kbd></button>
-<output name="status">Loading the engine (about 22 MB)...</output>
+<output name="status">Loading the engine...</output>
 <p class="credit"></p>
 </details>
 <div class="fps" hidden></div>

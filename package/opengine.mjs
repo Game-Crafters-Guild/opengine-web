@@ -425,8 +425,9 @@ var Bridge = class {
 };
 
 // src/build-stamp.ts
-var kPackageVersion = "2026.10.0-alpha.1";
+var kPackageVersion = "2026.10.0-alpha.2";
 var kReflectionFingerprint = null;
+var kCoreWasmBytes = { st: 19520482, mt: 21297788 };
 
 // src/components.ts
 var ComponentToken = class {
@@ -475,6 +476,83 @@ function browserHost() {
     log: (message) => console.info(message),
     reportError: (error) => globalThis.reportError(error)
   };
+}
+
+// src/progress.ts
+function downloadTracker(onProgress) {
+  if (!onProgress) return (_phase, files) => files.map((file) => file.response);
+  return (phase, files) => trackDownload(phase, files, onProgress);
+}
+function fileNameOf(url) {
+  const name = url.startsWith("blob:") ? url.slice(url.indexOf("#") + 1 || url.length) : new URL(url).pathname.split("/").pop() ?? "";
+  return /\.[^.]+$/.test(name) ? name : null;
+}
+async function downloadModel(url, onProgress) {
+  const name = fileNameOf(url);
+  if (!name) return null;
+  const failure = (why) => new OpenEngineError("Engine", `scene.load('${url}') failed: could not fetch '${url}': ${why}`);
+  let response;
+  try {
+    response = await fetch(url);
+  } catch {
+    throw failure("the request failed (a file on another origin loads only when its host sends CORS headers).");
+  }
+  if (!response.ok) throw failure(`HTTP ${response.status}.`);
+  const [counted] = trackDownload("model", [{ response }], onProgress);
+  let bytes;
+  try {
+    bytes = await counted.blob();
+  } catch {
+    throw failure("the download broke off; load it again.");
+  }
+  return `${URL.createObjectURL(bytes)}#${name}`;
+}
+function progressOf(count) {
+  const { decoded, decodedBytes, length } = count;
+  if (count.done) return { loaded: length && decodedBytes ? length : decoded, total: length && decodedBytes ? length : decoded };
+  if (length && decodedBytes) return { loaded: Math.min(length, Math.round(decoded * length / decodedBytes)), total: length };
+  if (length && !count.encoded && !count.overran) return { loaded: decoded, total: length };
+  if (!length && decodedBytes) return { loaded: Math.min(decodedBytes, decoded), total: decodedBytes };
+  return null;
+}
+function trackDownload(phase, files, onProgress) {
+  const counts = files.map(({ response, decodedBytes }) => {
+    const length = Number(response.headers.get("Content-Length"));
+    const encoding = response.headers.get("Content-Encoding");
+    return { decoded: 0, decodedBytes, length: length > 0 ? length : 0, encoded: !!encoding && encoding !== "identity", overran: false, done: false };
+  });
+  let reported = -1;
+  const report = () => {
+    const each = counts.map((count) => progressOf(count) ?? { loaded: count.decoded, total: 0 });
+    const loaded = each.reduce((sum, file) => sum + file.loaded, 0);
+    const known = each.every((file) => file.total > 0);
+    const done = counts.every((count) => count.done);
+    if (loaded <= reported && !done && reported >= 0) return;
+    reported = loaded;
+    onProgress({ phase, loaded, total: known || done ? each.reduce((sum, file) => sum + file.total, 0) : 0 });
+  };
+  const wrapped = files.map(({ response }, index) => {
+    const count = counts[index];
+    if (!response.body) {
+      count.done = true;
+      return response;
+    }
+    const counter = new TransformStream({
+      transform(chunk, controller) {
+        count.decoded += chunk.byteLength;
+        if (count.length && count.decoded > count.length) count.overran = true;
+        report();
+        controller.enqueue(chunk);
+      },
+      flush() {
+        count.done = true;
+        if (counts.every((each) => each.done)) report();
+      }
+    });
+    return new Response(response.body.pipeThrough(counter), { status: response.status, statusText: response.statusText, headers: response.headers });
+  });
+  report();
+  return wrapped;
 }
 
 // src/math.ts
@@ -572,6 +650,31 @@ function eulerDegreesFromQuat(q) {
   const sinyCosp = 2 * (q.w * q.z + q.x * q.y);
   const cosyCosp = 1 - 2 * (q.y * q.y + q.z * q.z);
   return [Math.atan2(sinrCosp, cosrCosp) / kDegToRad, pitch / kDegToRad, Math.atan2(sinyCosp, cosyCosp) / kDegToRad];
+}
+function matrixMultiply(a, b) {
+  const out = new Array(16).fill(0);
+  for (let col = 0; col < 4; ++col) {
+    for (let row = 0; row < 4; ++row) {
+      let sum = 0;
+      for (let k = 0; k < 4; ++k) sum += a[k * 4 + row] * b[col * 4 + k];
+      out[col * 4 + row] = sum;
+    }
+  }
+  return out;
+}
+function matrixDeterminant3(m) {
+  return m[0] * (m[5] * m[10] - m[9] * m[6]) - m[4] * (m[1] * m[10] - m[9] * m[2]) + m[8] * (m[1] * m[6] - m[5] * m[2]);
+}
+function matrixSolveDirection(m, v) {
+  const det = matrixDeterminant3(m);
+  const replace = (c) => {
+    const r = m.slice();
+    r[c * 4] = v[0];
+    r[c * 4 + 1] = v[1];
+    r[c * 4 + 2] = v[2];
+    return r;
+  };
+  return [matrixDeterminant3(replace(0)) / det, matrixDeterminant3(replace(1)) / det, matrixDeterminant3(replace(2)) / det];
 }
 function transformBox(m, center, half) {
   const out = [m[12], m[13], m[14]];
@@ -697,6 +800,21 @@ var TransformViewImpl = class {
   rotateZ(degrees) {
     return this.rotateLocal([0, 0, 1], degrees);
   }
+  rotateWorldY(degrees) {
+    const parentWorld = this.m_Access.readParentWorldMatrix();
+    const [x, y, z] = matrixSolveDirection(parentWorld, [0, 1, 0]);
+    const length = Math.hypot(x, y, z);
+    if (!Number.isFinite(length) || length === 0) return this;
+    const angle = matrixDeterminant3(parentWorld) < 0 ? -degrees : degrees;
+    const turn = composeMatrix([0, 0, 0], quatFromAxisDegrees([x / length, y / length, z / length], angle), [1, 1, 1]);
+    const m = this.m_Access.readMatrix();
+    const turned = matrixMultiply(turn, m);
+    turned[12] = m[12];
+    turned[13] = m[13];
+    turned[14] = m[14];
+    this.m_Access.writeMatrix(turned);
+    return this;
+  }
   rotateLocal(axis, degrees) {
     const m = this.m_Access.readMatrix();
     const q = quatMultiply(matrixRotation(m), quatFromAxisDegrees(axis, degrees));
@@ -786,6 +904,7 @@ var EntityImpl = class _EntityImpl {
       readMatrix: () => this.readField(this.component("Transform"), "matrix"),
       writeMatrix: (matrix) => this.writeField(this.component("Transform"), "matrix", matrix),
       readParent: () => this.readParent(),
+      readParentWorldMatrix: () => this.readParentWorldMatrix(),
       writeParent: (parent) => this.writeParent(parent)
     });
   }
@@ -878,6 +997,12 @@ var EntityImpl = class _EntityImpl {
     if (!this.hasInfo(parent)) return null;
     return this.readField(parent, "parent");
   }
+  readParentWorldMatrix() {
+    let world = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    for (let parent = this.readParent(); parent; parent = parent.readParent())
+      world = matrixMultiply(parent.readField(parent.component("Transform"), "matrix"), world);
+    return world;
+  }
   writeParent(parent) {
     this.assertAlive();
     const parentId = parent === null ? kInvalidEntity : parent.id;
@@ -896,6 +1021,8 @@ var SceneImpl = class {
   m_Defaults = null;
   /** Settles when every load requested so far has settled. */
   m_LoadQueue = Promise.resolve();
+  /** The address the engine loaded each URL under: the URL itself, or the blob: URL of its download with progress. */
+  m_EngineUrls = /* @__PURE__ */ new Map();
   /** The load the engine is running, polled until it is Ready or Failed. */
   m_ActiveLoad = null;
   constructor(host) {
@@ -925,10 +1052,10 @@ var SceneImpl = class {
     }
     return entity;
   }
-  load(url) {
+  load(url, options) {
     if (this.bridge.contract.disposed) return Promise.reject(this.bridge.contract.disposedError("scene.load"));
     const absolute = this.m_Host.resolveUrl(url);
-    const load = this.m_LoadQueue.then(() => this.startLoad(absolute));
+    const load = this.m_LoadQueue.then(() => this.startLoad(absolute, options?.onProgress));
     this.m_LoadQueue = load.catch(() => void 0);
     return load;
   }
@@ -977,15 +1104,40 @@ var SceneImpl = class {
   onFrame(callback) {
     return this.m_Host.onFrame(callback);
   }
-  startLoad(url) {
+  /**
+   * Hands the engine `url`, or the file downloaded with progress the first time it is loaded
+   * that way: the engine fetches a URL once and reuses it, so a URL keeps the address the
+   * engine first had it under, until a load of it fails.
+   */
+  async startLoad(url, onProgress) {
     const bridge = this.bridge;
     bridge.contract.checkAlive(`scene.load('${url}')`);
-    const handle = bridge.abi.ge_load_asset(bridge.writeString(url));
-    if (handle === kInvalidAsset) throw bridge.failure(`scene.load('${url}')`);
-    return new Promise((resolve, reject) => {
+    let engineUrl = this.m_EngineUrls.get(url);
+    const downloaded = !engineUrl && onProgress ? await downloadModel(url, onProgress) : null;
+    engineUrl ??= downloaded ?? url;
+    const release = () => {
+      if (downloaded) URL.revokeObjectURL(downloaded.slice(0, downloaded.indexOf("#")));
+    };
+    let handle;
+    try {
+      bridge.contract.checkAlive(`scene.load('${url}')`);
+      handle = bridge.abi.ge_load_asset(bridge.writeString(engineUrl));
+      if (handle === kInvalidAsset) throw bridge.failure(`scene.load('${url}')`);
+    } catch (error) {
+      release();
+      throw error;
+    }
+    this.m_EngineUrls.set(url, engineUrl);
+    const loaded = new Promise((resolve, reject) => {
       this.m_ActiveLoad = { handle, url, resolve, reject };
       this.m_Host.requestLoadPoll();
     });
+    const settled = (failed) => {
+      release();
+      if (failed) this.m_EngineUrls.delete(url);
+    };
+    loaded.then(() => settled(false), () => settled(true));
+    return loaded;
   }
   defaults() {
     if (!this.m_Defaults) throw new Error("the default entities are created by Engine.create");
@@ -1215,7 +1367,7 @@ async function createEngine(options, host, loadCore, stamp) {
   }
   const { build, reason } = selectBuild(options.threads ?? "auto", host.crossOriginIsolated());
   host.log(`OpenEngine: using the ${build === "mt" ? "threaded" : "single-threaded"} build because ${reason}.`);
-  const bridge = new Bridge(await loadCore(build, options.canvas));
+  const bridge = new Bridge(await loadCore(build, options.canvas, downloadTracker(options.onProgress)));
   const selector = canvasSelector(options.canvas);
   const code = await bridge.contract.suspend("ge_create", () => bridge.abi.ge_create(bridge.writeString(selector), 0));
   bridge.check(code, "Engine.create");
@@ -1231,7 +1383,7 @@ function defaultCoreUrl() {
   return new URL("./", import.meta.url).href;
 }
 function bindingLoader(coreUrl) {
-  return async (build, canvas) => {
+  return async (build, canvas, track) => {
     const bindingUrl = new URL("opengine-core-binding.js", coreUrl).href;
     let binding;
     try {
@@ -1239,7 +1391,7 @@ function bindingLoader(coreUrl) {
     } catch (error) {
       throw new OpenEngineError("Engine", `Could not load the engine module from ${bindingUrl}: ${String(error)}. Serve opengine-core-binding.js and opengine-core.st/mt.js and .wasm from that folder, or pass coreUrl to Engine.create.`);
     }
-    return binding.loadCore({ build, coreUrl, canvas });
+    return binding.loadCore({ build, coreUrl, canvas, wasmBytes: kCoreWasmBytes?.[build], track });
   };
 }
 var Engine = {
