@@ -1,6 +1,6 @@
 {
   "name": "@openengine/web",
-  "version": "2026.10.0-alpha.2",
+  "version": "2026.10.0-alpha.3",
   "description": "The engine on a web page: a WebGPU renderer and an ECS behind a small TypeScript API.",
   "license": "MIT",
   "type": "module",

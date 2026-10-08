@@ -408,6 +408,20 @@ var Bridge = class {
     const read = (first) => [floats.getFloat32(4 * first, true), floats.getFloat32(4 * first + 4, true), floats.getFloat32(4 * first + 8, true)];
     return { center: read(0), half: read(3) };
   }
+  /** The ids of the entity's direct children. */
+  entityChildren(entity) {
+    let capacity = 16;
+    for (; ; ) {
+      const ptr = this.scratch(4 * capacity);
+      const count = this.abi.ge_entity_children(entity, ptr, capacity);
+      if (count < 0) throw this.failure("entity.children");
+      if (count <= capacity) {
+        const heap = this.m_Raw.HEAPU8;
+        return Array.from(new Uint32Array(heap.buffer, heap.byteOffset + ptr, count));
+      }
+      capacity = count;
+    }
+  }
   /** The field's bytes for `value`, encoded on the JavaScript side so a bad value throws before any write. */
   encode(field, value) {
     const bytes = new Uint8Array(field.size);
@@ -425,9 +439,9 @@ var Bridge = class {
 };
 
 // src/build-stamp.ts
-var kPackageVersion = "2026.10.0-alpha.2";
+var kPackageVersion = "2026.10.0-alpha.3";
 var kReflectionFingerprint = null;
-var kCoreWasmBytes = { st: 19520482, mt: 21297788 };
+var kCoreWasmBytes = { st: 19530107, mt: 21307861 };
 
 // src/components.ts
 var ComponentToken = class {
@@ -554,6 +568,34 @@ function trackDownload(phase, files, onProgress) {
   report();
   return wrapped;
 }
+
+// src/animation-view.ts
+var AnimationViewImpl = class {
+  m_Bridge;
+  m_Entity;
+  m_AssertAlive;
+  constructor(bridge, entity, assertAlive) {
+    this.m_Bridge = bridge;
+    this.m_Entity = entity;
+    this.m_AssertAlive = assertAlive;
+  }
+  get clips() {
+    this.m_AssertAlive();
+    const text = this.m_Bridge.abi.ge_animation_clips(this.m_Entity);
+    if (text === 0) throw this.m_Bridge.failure("entity.animation.clips");
+    return JSON.parse(this.m_Bridge.readString(text));
+  }
+  play(clipName, options = {}) {
+    this.m_AssertAlive();
+    const bridge = this.m_Bridge;
+    const code = bridge.abi.ge_animation_play(this.m_Entity, bridge.writeString(clipName), options.speed ?? 1);
+    bridge.check(code, `entity.animation.play('${clipName}')`);
+  }
+  pause() {
+    this.m_AssertAlive();
+    this.m_Bridge.check(this.m_Bridge.abi.ge_animation_pause(this.m_Entity), "entity.animation.pause()");
+  }
+};
 
 // src/math.ts
 var kDegToRad = Math.PI / 180;
@@ -791,6 +833,9 @@ var TransformViewImpl = class {
   set parent(parent) {
     this.m_Access.writeParent(parent);
   }
+  get children() {
+    return this.m_Access.readChildren();
+  }
   rotateX(degrees) {
     return this.rotateLocal([1, 0, 0], degrees);
   }
@@ -896,14 +941,17 @@ var EntityImpl = class _EntityImpl {
   id;
   owner;
   transform;
+  animation;
   m_Alive = true;
   constructor(owner, id) {
     this.owner = owner;
     this.id = id;
+    this.animation = new AnimationViewImpl(owner.bridge, id, () => this.assertAlive());
     this.transform = new TransformViewImpl({
       readMatrix: () => this.readField(this.component("Transform"), "matrix"),
       writeMatrix: (matrix) => this.writeField(this.component("Transform"), "matrix", matrix),
       readParent: () => this.readParent(),
+      readChildren: () => this.readChildren(),
       readParentWorldMatrix: () => this.readParentWorldMatrix(),
       writeParent: (parent) => this.writeParent(parent)
     });
@@ -996,6 +1044,10 @@ var EntityImpl = class _EntityImpl {
     const parent = this.component("Parent");
     if (!this.hasInfo(parent)) return null;
     return this.readField(parent, "parent");
+  }
+  readChildren() {
+    this.assertAlive();
+    return this.owner.bridge.entityChildren(this.id).map((id) => this.owner.entityFor(id));
   }
   readParentWorldMatrix() {
     let world = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];

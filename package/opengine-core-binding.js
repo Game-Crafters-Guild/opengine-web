@@ -7,12 +7,13 @@
 // kInvalidEntity is 0xffffffff, not -1.
 const kUnsignedExports = [
     'ge_load_asset', 'ge_instantiate_model', 'ge_entity_create', 'ge_reflection_json', 'ge_last_error',
+    'ge_animation_clips',
 ];
 const kSignedExports = [
     'ge_tick', 'ge_update_assets', 'ge_resize', 'ge_asset_status',
-    'ge_entity_bounds', 'ge_entity_destroy', 'ge_entity_parent',
+    'ge_entity_bounds', 'ge_entity_destroy', 'ge_entity_parent', 'ge_entity_children',
     'ge_component_add', 'ge_component_remove', 'ge_component_has',
-    'ge_field_get', 'ge_field_set',
+    'ge_field_get', 'ge_field_set', 'ge_animation_play', 'ge_animation_pause',
 ];
 
 /** Adapts an instantiated engine module to the Abi interface. */

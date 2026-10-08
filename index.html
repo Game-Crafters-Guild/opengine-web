@@ -18,8 +18,13 @@ li { margin: 12px 0; }
 <p>A WebGPU renderer and an entity-component world behind a small JavaScript API. Each example is one page: its engine calls in <code>main.js</code>, its controls in a script beside it. They need a browser with WebGPU: current Chrome or Edge.</p>
 <ul>
 <li><a href="package/examples/model-viewer/index.html">Model viewer</a>: pick a sample model or open your own .glb, orbit it, set the time of day, stop or start the turntable, and show the frame rate.
-<span class="meta" data-lines="54" data-panel-lines="355">54 lines of engine calls in main.js; 355 lines of page and panel. Models: Khronos glTF Sample Assets, CC0 1.0, CC BY 4.0 and CC BY-NC 4.0. Early access (alpha).</span></li>
+<span class="meta" data-lines="55" data-panel-lines="273">55 lines of engine calls in main.js; 273 lines of page and panel. Models: Khronos glTF Sample Assets, CC0 1.0, CC BY 4.0 and CC BY-NC 4.0. Early access (alpha).</span></li>
+<li><a href="package/examples/instancing/index.html">Instancing</a>: one model drawn up to 10,000 times on a spiral, every copy an entity turning about world up each frame; set the count with a slider and show the frame rate.
+<span class="meta" data-lines="59" data-panel-lines="119">59 lines of engine calls in main.js; 119 lines of page and panel. Model: Avocado, Khronos glTF Sample Assets, CC0 1.0. Early access (alpha).</span></li>
+<li><a href="package/examples/skinning/index.html">Skinning</a>: an animated fox; pick one of its clips, set the playback speed, pause and resume.
+<span class="meta" data-lines="46" data-panel-lines="128">46 lines of engine calls in main.js; 128 lines of page and panel. Model: Fox, Khronos glTF Sample Assets, CC0 1.0 (mesh) and CC BY 4.0 (rigging, animation and conversion), credited on the page. Early access (alpha).</span></li>
 </ul>
+<p class="meta" data-shared-lines="90">The pages share 90 lines of status, download bar and frame-rate code in <code>examples/shared/</code>.</p>
 <p class="meta">Every asset's source and license is listed in <a href="package/examples/ASSET_PROVENANCE.md">ASSET_PROVENANCE.md</a>. The pages load <code>coi-serviceworker.js</code> (MIT) to run the threaded build on hosts that cannot send isolation headers.</p>
 </main>
 </body>

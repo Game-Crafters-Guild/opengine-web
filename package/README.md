@@ -48,7 +48,22 @@ engine.run();
 
 Every entity is a set of components, and `entity.set(Component, values)` is the one call that adds one: `lamp.set(Light, { type: 'Point', intensity: 800 })` gives the entity a `Light` when it has none and otherwise updates the named fields, leaving the rest as they are. `entity.add(Light)` adds a component with the engine's defaults (and throws if the entity already has one), `entity.remove(Light)` takes it off, and `entity.has(Light)` asks. `entity.get(Light)` returns a live view, or `undefined` when the entity has no `Light`: reading `view.intensity` reads the engine, and assigning it writes the engine, so a value the engine changes (physics, animation, the sky driving the sun) is what the page sees next. The types name the components and their fields, so an editor completes them and a typo is a compile error: `Light`, `Camera`, `MeshRenderer`, `SkyEnvironment`, `LocalBounds` and `Transform` are exported beside `Engine` today, with their fields in camelCase and their units in the documentation of each field; the generated types that replace this first set name every component. A field that refers to another entity takes and returns an `Entity`, or null for none (`sky.set(SkyEnvironment, { sunLight: sun })`), and an asset field an `AssetRef` (`{ guid }`). `Transform` is on every entity, so `add` and `remove` do not take it.
 
-Two views are written by hand rather than generated from a component: `entity.transform` (position, rotation and scale over the Transform matrix) and `entity.bounds` (the LocalBounds box, which has no reflected field type, read for the page by the engine module).
+Two views are written by hand rather than generated from a component: `entity.transform` (position, rotation and scale over the Transform matrix, and the hierarchy: `parent` and `children`) and `entity.bounds` (the LocalBounds box, which has no reflected field type, read for the page by the engine module). `entity.transform.children` lists the entities parented to it: a loaded model's root has its meshes below it, each with a `MeshRenderer` a page can read or copy onto entities of its own.
+
+## Playing a model's animation
+
+A skinned model with animation clips plays them through `entity.animation` on the entity `scene.load` returned: `fox.animation.clips` lists the clip names in the model's order, `fox.animation.play('Run', { speed: 1.5 })` plays one, looping, at a multiple of its authored rate (default 1), and `fox.animation.pause()` holds the pose. Calling `play` for the clip that is already playing keeps its place, so it changes the speed or resumes after a pause; another clip starts from its beginning. A clip name the model does not have throws, naming the ones it has. A change takes effect on the next frame. The model rests in its bind pose until the page plays a clip.
+
+```js
+import { Engine } from '@openengine/web';
+
+const canvas = document.querySelector('canvas');
+if (!canvas) throw new Error('The page needs a <canvas> element.');
+const engine = await Engine.create({ canvas });
+const fox = await engine.scene.load('models/Fox.glb');      // a skinned model with clips
+fox.animation.play(fox.animation.clips[0], { speed: 1.5 }); // its first clip, half again as fast
+engine.run();
+```
 
 ## Units and axes
 
@@ -97,6 +112,8 @@ const model = await engine.scene.load('models/robot.glb', { onProgress: ({ loade
 ## Examples
 
 `examples/model-viewer` is one page: pick a sample model or open your own `.glb` (or a `.gltf` with its buffers and images embedded; FBX is not supported on the web), orbit it, set the time of day, and show the frame rate with F. Its engine calls are `main.js`; the control panel is `panel.js` and `panel.css` beside it. The two helmets in its list are hosted by the demo site (`models/` beside the package); a copy of the package served elsewhere lists them but cannot load them. `coi-serviceworker.js` sits in the package root, beside the engine module; the models are loaded by URL from their sources, listed with their licenses in `examples/ASSET_PROVENANCE.md`.
+
+`examples/instancing` draws one model up to 10,000 times: each copy is an entity with its own `Transform` and the loaded model's `MeshRenderer` fields, placed on a spiral, and every copy turns about world up in `onFrame`. A slider sets the count and F shows the frame rate. Turning is one call per copy per frame until the batched update: at 10,000 copies that is tens of milliseconds a frame, while the copies at rest draw in a few. The web renderer draws these copies in many small instanced batches rather than once per mesh, which caps the page at 10,000 for now. `examples/skinning` plays the Fox sample's clips with `entity.animation`: a list of the model's clips, a speed slider and a pause button. The pages share their status line, download bar and frame-rate readout through `examples/shared/page-status.js`.
 
 ## Known issues (alpha)
 

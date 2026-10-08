@@ -103,6 +103,11 @@ export interface TransformView {
     readonly scale: Vector3View;
     /** The parent entity, or null for a root. Assigning reparents; null makes it a root. */
     parent: Entity | null;
+    /**
+     * The entities whose parent is this one, read from the engine at access. A loaded model's
+     * meshes are its children (or deeper descendants), each with a MeshRenderer.
+     */
+    readonly children: Entity[];
     /** Rotates about the entity's own X axis by `degrees`; a positive turn takes +Y toward +Z. */
     rotateX(degrees: number): this;
     /** Rotates about the entity's own Y axis by `degrees`; a positive turn takes +Z toward +X. */
@@ -131,6 +136,25 @@ export interface Bounds {
     readonly max: Vector3;
 }
 
+/**
+ * A loaded model's animation clips, played one at a time and looping. Works on the entity
+ * `scene.load` returned for a skinned model with clips; on any other entity every member throws.
+ * A change takes effect on the next frame.
+ */
+export interface AnimationView {
+    /** The model's clip names, in the model's order. */
+    readonly clips: string[];
+    /**
+     * Plays the clip named `clipName`, looping, at `speed` times its authored rate (default 1; 0
+     * holds the pose). Playing the clip that is already playing keeps its time: call it again to
+     * change the speed, or to resume after `pause()`. Another clip starts from its beginning.
+     * Throws naming the model's clips when it has no clip by that name.
+     */
+    play(clipName: string, options?: { speed?: number }): void;
+    /** Holds the model at its current pose; `play` resumes. */
+    pause(): void;
+}
+
 /** A handle on one engine entity. */
 export interface Entity {
     /** The engine's entity id. */
@@ -142,6 +166,8 @@ export interface Entity {
      * The entity's LocalBounds transformed into its parent's space, or null when it has none.
      */
     readonly bounds: Bounds | null;
+    /** The entity's animation clips, when it is a skinned model with clips. */
+    readonly animation: AnimationView;
     /** A live view of `component`, or undefined when the entity does not have it. */
     get<T extends object>(component: ComponentType<T>): ComponentView<T> | undefined;
     /**

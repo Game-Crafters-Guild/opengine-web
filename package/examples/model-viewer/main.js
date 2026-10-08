@@ -4,7 +4,8 @@
 // License: CC0 1.0, CC BY 4.0 and CC BY-NC 4.0 (the listed models, credited on screen); MIT (coi-serviceworker.js).
 // Needs: WebGPU; @openengine/web; coi-serviceworker.js beside the engine module for the threaded build.
 import { Camera, Engine, OrbitControls } from '@openengine/web';
-import { controlPanel, downloadProgress, freeArea, setStatus } from './panel.js';
+import { downloadProgress, freeArea, setStatus } from '../shared/page-status.js';
+import { controlPanel } from './panel.js';
 
 const found = document.querySelector('canvas');
 if (!found) throw new Error('The page needs a <canvas>.');

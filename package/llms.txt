@@ -9,11 +9,12 @@ Write pages as one HTML file with a `<canvas>` and a `<script type="module">`. U
 ## Rules
 
 - `await Engine.create({ canvas })` before anything else; `engine.scene` is the world.
-- `await scene.load(url)` returns the model's root entity; `entity.bounds.center` and `.size` frame it.
+- `await scene.load(url)` returns the model's root entity; `entity.bounds.center` and `.size` frame it; its meshes are below it (`entity.transform.children`, each with a `MeshRenderer`).
 - Units: meters; degrees for `transform.rotation`, `rotateX/Y/Z` (own axes), `rotateWorldY` (world up through the entity's position; exact under parents of uniform scale; nothing under a parent scaled to zero or flattened), a positive turn taking +Y toward +Z, +Z toward +X (clockwise seen from above) and +X toward +Y, `OrbitControls`; lux for `scene.sun.intensity` (100000 = clear noon); hours for `scene.sky.timeOfDay`; seconds for `dt`.
 - Axes: left-handed, +X right, +Y up, +Z forward; cameras and lights look along their entity's +Z.
 - Components: `entity.set(Light, { type: 'Point', intensity: 800 })` adds or updates; `entity.get(Light)` returns a live view or `undefined`; `entity.add`, `entity.remove`, `entity.has`. Field names are camelCase (`intensity`, `fovY`, `timeOfDayHours`); enum fields take the enumerator name as a string; entity fields take an `Entity` or null; asset fields take `{ guid }`.
 - Animate in `engine.onFrame(dt => { ... })`, then call `engine.run()`. `OrbitControls` updates itself every frame.
+- A skinned model's clips: `model.animation.clips` (names), `model.animation.play('Run', { speed: 1 })` (loops; the clip already playing keeps its place), `model.animation.pause()`. The model rests in its bind pose until a clip plays.
 - Assets from another origin need CORS headers (Access-Control-Allow-Origin) under either build.
 - Progress: `Engine.create({ canvas, onProgress })` and `scene.load(url, { onProgress })` call `onProgress({ phase, loaded, total })` in bytes (network bytes with Content-Length, else decompressed): show `loaded / total` as a percentage; `total` is 0 while unknown; phases `'wasm'` and `'pack'` (the engine, reported together from the first call: add them up) and `'model'`.
 
@@ -36,5 +37,5 @@ engine.run();
 ## Reference
 
 - [README](README.md): the ten calls, adding components, threads and hosting.
-- [opengine.d.ts](ts/opengine.d.ts): Engine, Scene, Entity, TransformView, OrbitControls, SunView, SkyView, OpenEngineError.
+- [opengine.d.ts](ts/opengine.d.ts): Engine, Scene, Entity, TransformView, AnimationView, OrbitControls, SunView, SkyView, OpenEngineError.
 - [components.d.ts](ts/components.d.ts): the reflected components and their fields, with units (the first six today; the generated file names every component).
