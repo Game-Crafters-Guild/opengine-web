@@ -1,5 +1,5 @@
-// Reflected component types: a hand-written draft of the first six components the day-one
-// pages touch. The scanner's --emit-dts generates this file from the engine's component
+// Reflected component types: a hand-written draft of the seven components the pages
+// touch. The scanner's --emit-dts generates this file from the engine's component
 // headers and names every component; the generated file replaces this draft when it lands.
 //
 // What the generator emits, and this draft with it:
@@ -170,7 +170,6 @@ export interface Camera {
     autoExposureMaxEv: number;
     autoExposureSpeedUp: number;
     autoExposureSpeedDown: number;
-    autoExposureKey: number;
     aspectPreset: number;
     customAspectWidth: number;
     customAspectHeight: number;
@@ -219,3 +218,45 @@ export interface SkyEnvironment {
     showSun: boolean;
 }
 export declare const SkyEnvironment: ComponentType<SkyEnvironment>;
+
+// ---------------------------------------------------------------------------------------
+// DDGIVolume (Components/Rendering/DDGIVolume.h): dynamic diffuse global illumination. A box of
+// probes, sized and placed by the entity's transform (a unit cube scaled by Transform.scale),
+// that traces how light bounces between surfaces and the sky and lights everything inside it.
+//
+// DRAFT SUBSET: 12 of the 28 reflected fields, the ones a page sets. The generated file
+// carries all of them.
+
+export type DDGIVolumeFit = 'Manual' | 'FollowCamera';
+export type DDGIProbePlacement = 'Grid' | 'Adaptive';
+export type DDGICascadeMode = 'SingleGrid' | 'Cascaded2';
+export type DDGIDebugView = 'None' | 'Coverage' | 'ProbeState' | 'CascadeWeight' | 'NearestProbeIrradiance' |
+    'ProbeStateFine' | 'NearestProbeIrradianceFine' | 'FineProbeCoord' | 'FineProbeSlot';
+
+export interface DDGIVolume {
+    /** Manual: the transform places and sizes the grid. FollowCamera: re-centred on the camera, snapped to whole probe cells; followRange and followHeightFraction size it, the transform's scale does not. */
+    fit: DDGIVolumeFit;
+    /** Meters the grid reaches from the camera when fit is 'FollowCamera'. */
+    followRange: number;
+    /** Vertical reach of a 'FollowCamera' grid, as a fraction of followRange. */
+    followHeightFraction: number;
+    /** 'Adaptive' moves probes out of geometry and switches off the ones that stay buried. */
+    probePlacement: DDGIProbePlacement;
+    /** Probes along the grid's longest axis, 2..32; cost grows roughly with its cube. */
+    probesLongAxis: number;
+    /** Rays per probe per update, 32..256. */
+    raysPerProbe: number;
+    /** Multiplier on the indirect light the volume adds. */
+    intensity: number;
+    /** 0: one bounce; about 1: full multi-bounce. */
+    bounceIntensity: number;
+    /** How much sky light probe rays that hit nothing pick up; 1 is the sky's own brightness. */
+    skyIntensity: number;
+    /** 'Cascaded2' adds a finer grid over the middle of the volume at about twice the cost. */
+    cascades: DDGICascadeMode;
+    /** Reflections from the probes on metals and smooth surfaces. */
+    enableGlossy: boolean;
+    /** Draws what the probes resolved instead of lit shading; diagnostic only. */
+    debugView: DDGIDebugView;
+}
+export declare const DDGIVolume: ComponentType<DDGIVolume>;

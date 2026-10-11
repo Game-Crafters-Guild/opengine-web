@@ -60,6 +60,8 @@ export type LightType = 'Directional' | 'Point' | 'Spot' | 'Ambient' | 'Area' | 
 
 export type LightUnit = 'Unitless' | 'Lux' | 'Lumen' | 'Candela';
 
+export type MarkupMemberMode = 'Include' | 'Exclude';
+
 export type OceanDepthFogFalloff = 'Exponential' | 'Linear' | 'Smooth';
 
 export type OceanInputBlend = 'Replace' | 'Additive' | 'Multiply' | 'Minimum' | 'Maximum';
@@ -291,7 +293,6 @@ export interface Camera {
     autoExposureMaxEv: number;
     autoExposureSpeedUp: number;
     autoExposureSpeedDown: number;
-    autoExposureKey: number;
     aspectPreset: number;
     customAspectWidth: number;
     customAspectHeight: number;
@@ -370,7 +371,7 @@ export interface DDGIVolume {
     debugView: DDGIDebugView;
     /** Draws the probe lattice in the Scene View, matching the reference demo's show-probes checkbox. Selecting the volume draws its bounds, not its probes, so this stays authoritative while you edit it. */
     showProbes: boolean;
-    /** Where the grid's centre comes from. Manual keeps it where you placed it. Follow Camera re-centres it on the camera every frame so the scene has GI everywhere the camera goes, snapped to whole probe cells so small movements cost nothing. The entity's scale still sizes the grid in both modes. */
+    /** Where the grid's centre comes from. Manual keeps it where you placed it. Follow Camera re-centres it on the camera every frame so the scene has GI everywhere the camera goes, snapped to whole probe cells so small movements cost nothing. In Manual the entity's scale sizes the grid; in Follow Camera, Follow Range and Follow Height Fraction size it. */
     fit: DDGIVolumeFit;
     /** How far GI reaches from the camera, in world units, when Fit is Follow Camera. Larger covers more of the level but spreads the same probe count thinner - probe spacing is range * 2 / (Divisions - 1). Ignored when Fit is Manual, where the entity's scale sizes the volume instead. */
     followRange: number;
@@ -651,6 +652,12 @@ export interface LocalBounds {
     castShadows: boolean;
 }
 export declare const LocalBounds: ComponentType<LocalBounds>;
+
+export interface MarkupRegionMember {
+    entity: Entity | null;
+    mode: MarkupMemberMode;
+}
+export declare const MarkupRegionMember: ComponentType<MarkupRegionMember>;
 
 export interface MeshGPUData {
     meshIndex: number;

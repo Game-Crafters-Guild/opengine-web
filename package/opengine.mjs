@@ -263,6 +263,119 @@ function encodeField(field, value, view, offset) {
   value.forEach((element, i) => encodeElement(field, field.kind, element, view, offset + i * step));
 }
 
+// src/query.ts
+var kFloatKinds = /* @__PURE__ */ new Set(["Float", "Vec2", "Vec3", "Vec4", "Quat", "Color", "Mat4"]);
+var kMaxQueryColumns = 16;
+var kQueryBlockBytes = 8 * kMaxQueryColumns + 4 * kMaxQueryColumns + 4 * (kMaxQueryColumns + 1) + 4;
+var QueryImpl = class {
+  m_Owner;
+  /** Reads first, then writes: the order ge_query_begin and ge_query_next_chunk use. */
+  m_Columns;
+  m_ReadCount;
+  constructor(owner, read, write) {
+    this.m_Owner = owner;
+    const reflection = owner.bridge.reflection;
+    const columns = [...read.map((c) => ({ c, write: false })), ...write.map((c) => ({ c, write: true }))];
+    if (columns.length === 0) throw new OpenEngineError("InvalidArgument", "scene.query needs at least one component.");
+    if (columns.length > kMaxQueryColumns) {
+      throw new OpenEngineError(
+        "InvalidArgument",
+        `scene.query takes at most ${kMaxQueryColumns} components; this one lists ${columns.length}.`
+      );
+    }
+    const names = /* @__PURE__ */ new Set();
+    this.m_Columns = columns.map(({ c, write: isWrite }) => {
+      if (names.has(c.name)) {
+        throw new OpenEngineError(
+          "InvalidArgument",
+          `scene.query lists ${c.name} twice; name it once, in read or in write (a written component can also be read).`
+        );
+      }
+      names.add(c.name);
+      return { info: reflection.component(c.name), write: isWrite, stride: 0 };
+    });
+    this.m_ReadCount = read.length;
+  }
+  forEachChunk(visit) {
+    const bridge = this.m_Owner.bridge;
+    const abi = bridge.abi;
+    const n = this.m_Columns.length;
+    const ids = bridge.queryBlock(), strides = ids + 8 * n, addresses = strides + 4 * n, count = addresses + 4 * (n + 1);
+    const typeIds = new BigUint64Array(abi.HEAPU8.buffer, ids, n);
+    this.m_Columns.forEach((column, i) => {
+      typeIds[i] = column.info.typeId;
+    });
+    bridge.check(
+      abi.ge_query_begin(ids, this.m_ReadCount, ids + 8 * this.m_ReadCount, n - this.m_ReadCount, strides),
+      "query.forEachChunk"
+    );
+    const heapStrides = new Uint32Array(abi.HEAPU8.buffer, strides, n);
+    this.m_Columns.forEach((column, i) => {
+      column.stride = heapStrides[i];
+    });
+    const chunk = new ChunkImpl(this.m_Owner, this.m_Columns);
+    try {
+      for (; ; ) {
+        const more = abi.ge_query_next_chunk(addresses, count);
+        if (more < 0) throw bridge.failure("query.forEachChunk");
+        if (more === 0) return;
+        const buffer = abi.HEAPU8.buffer;
+        chunk.point(Array.from(new Uint32Array(buffer, addresses, n + 1)), new Uint32Array(buffer, count, 1)[0]);
+        visit(chunk);
+        if (bridge.contract.disposed) return;
+      }
+    } catch (error) {
+      if (!bridge.contract.disposed && abi.ge_query_end() !== kOk) throw bridge.failure("query.forEachChunk");
+      throw error;
+    }
+  }
+};
+var ChunkImpl = class {
+  count = 0;
+  m_Owner;
+  m_Columns;
+  /** The entity ids' address, then each column's. */
+  m_Addresses = [];
+  constructor(owner, columns) {
+    this.m_Owner = owner;
+    this.m_Columns = columns;
+  }
+  point(addresses, count) {
+    this.m_Addresses = addresses;
+    this.count = count;
+  }
+  entity(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= this.count) {
+      throw new OpenEngineError("InvalidArgument", `chunk.entity takes 0 to ${this.count - 1}; got ${String(index)}.`);
+    }
+    const heap = this.m_Owner.bridge.abi.HEAPU8;
+    return this.m_Owner.entityFor(new Uint32Array(heap.buffer, this.m_Addresses[0], this.count)[index]);
+  }
+  floats(component, fieldName) {
+    const at = this.m_Columns.findIndex((c) => c.info.name === component.name);
+    if (at < 0) {
+      const names = this.m_Columns.map((c) => c.info.name).join(", ");
+      throw new OpenEngineError("InvalidArgument", `This query's components are ${names}; ${component.name} is not one of them.`);
+    }
+    const { info, write, stride } = this.m_Columns[at];
+    const field = this.m_Owner.bridge.reflection.field(info, fieldName);
+    if (!kFloatKinds.has(field.kind)) {
+      throw new OpenEngineError(
+        "InvalidArgument",
+        `chunk.floats reads float fields; ${info.name}.${field.jsName} is ${field.kind}. Use entity.get(${info.name}) for it.`
+      );
+    }
+    if (stride % 4 !== 0 || field.offset % 4 !== 0) {
+      throw new OpenEngineError("InvalidArgument", `${info.name} is not laid out in whole floats; use entity.get(${info.name}) for it.`);
+    }
+    const heap = this.m_Owner.bridge.abi.HEAPU8;
+    const address = this.m_Addresses[1 + at];
+    const bytes = this.count * stride;
+    const values = write ? new Float32Array(heap.buffer, address, bytes / 4) : new Float32Array(heap.buffer.slice(address, address + bytes));
+    return { values, offset: field.offset / 4, stride: stride / 4 };
+  }
+};
+
 // src/reflection.ts
 function fingerprint(text) {
   const kPrime = 0x100000001b3n;
@@ -278,7 +391,7 @@ function checkRelease(json, engineVersion, expected) {
   if (expected.fingerprint === null || fingerprint(json) === expected.fingerprint) return;
   throw new OpenEngineError(
     "VersionMismatch",
-    `The engine module is release ${engineVersion} and this library is ${expected.version}; their component layouts differ. Update @openengine/web to ${engineVersion}, or serve the engine module that ships with ${expected.version}.`
+    `The engine module is release ${engineVersion} and this library is ${expected.version}; their component layouts differ. Update @game-crafters-guild/openengine-web to ${engineVersion}, or serve the engine module that ships with ${expected.version}.`
   );
 }
 var Reflection = class {
@@ -292,6 +405,7 @@ var Reflection = class {
         name: field.name,
         jsName: field.tsName,
         kind: field.kind,
+        offset: field.offset,
         size: field.size,
         count: field.count,
         enumByName: field.enum ? new Map(field.enum.map((e) => [e.name, e.value])) : null,
@@ -337,6 +451,7 @@ var Bridge = class {
   m_Reflection = null;
   m_Scratch = 0;
   m_ScratchSize = 0;
+  m_QueryBlock = 0;
   constructor(raw) {
     this.m_Raw = raw;
     this.abi = guardAbi(raw, this.contract);
@@ -359,6 +474,14 @@ var Bridge = class {
       this.m_Scratch = this.m_Raw._malloc(this.m_ScratchSize);
     }
     return this.m_Scratch;
+  }
+  /**
+   * The block a running query's calls use, allocated once for the module's lifetime. Not the
+   * scratch arena: a query callback's own calls may reallocate that between two chunks.
+   */
+  queryBlock() {
+    if (this.m_QueryBlock === 0) this.m_QueryBlock = this.m_Raw._malloc(kQueryBlockBytes);
+    return this.m_QueryBlock;
   }
   /** Writes `text` as NUL-terminated UTF-8 into the scratch arena. */
   writeString(text) {
@@ -439,9 +562,9 @@ var Bridge = class {
 };
 
 // src/build-stamp.ts
-var kPackageVersion = "2026.10.0-alpha.3";
+var kPackageVersion = "2026.10.0-alpha.4";
 var kReflectionFingerprint = null;
-var kCoreWasmBytes = { st: 19530107, mt: 21307861 };
+var kCoreWasmBytes = { st: 22063397, mt: 23703996 };
 
 // src/components.ts
 var ComponentToken = class {
@@ -460,7 +583,8 @@ var LocalBounds = new ComponentToken("LocalBounds");
 var MeshRenderer = new ComponentToken("MeshRenderer");
 var Camera = new ComponentToken("Camera");
 var SkyEnvironment = new ComponentToken("SkyEnvironment");
-var kTokens = [Transform, Light, LocalBounds, MeshRenderer, Camera, SkyEnvironment];
+var DDGIVolume = new ComponentToken("DDGIVolume");
+var kTokens = [Transform, Light, LocalBounds, MeshRenderer, Camera, SkyEnvironment, DDGIVolume];
 function bindComponentTokens(reflection) {
   for (const token of kTokens) token.typeId = reflection.component(token.name).typeId;
 }
@@ -1075,7 +1199,7 @@ var SceneImpl = class {
   m_LoadQueue = Promise.resolve();
   /** The address the engine loaded each URL under: the URL itself, or the blob: URL of its download with progress. */
   m_EngineUrls = /* @__PURE__ */ new Map();
-  /** The load the engine is running, polled until it is Ready or Failed. */
+  /** The load the engine is running, polled until it is Ready or Failed, and the emissive strength it instantiates with. */
   m_ActiveLoad = null;
   constructor(host) {
     this.m_Host = host;
@@ -1093,9 +1217,15 @@ var SceneImpl = class {
   get sky() {
     return this.defaults().sky;
   }
-  create(name) {
+  create(nameOrOptions) {
+    const { name, mesh } = typeof nameOrOptions === "string" ? { name: nameOrOptions, mesh: void 0 } : nameOrOptions ?? {};
     const id = this.bridge.abi.ge_entity_create();
     if (id === kInvalidEntity) throw this.bridge.failure("scene.create");
+    if (mesh !== void 0 && this.bridge.abi.ge_entity_set_mesh(id, this.bridge.writeString(mesh)) !== kOk) {
+      const error = this.bridge.failure("scene.create");
+      this.bridge.abi.ge_entity_destroy(id);
+      throw error;
+    }
     const entity = this.entityFor(id);
     if (name !== void 0 && name !== "") {
       const info = this.bridge.reflection.component("Name");
@@ -1104,10 +1234,20 @@ var SceneImpl = class {
     }
     return entity;
   }
+  query(read, options) {
+    return new QueryImpl(this, read, options?.write ?? []);
+  }
   load(url, options) {
     if (this.bridge.contract.disposed) return Promise.reject(this.bridge.contract.disposedError("scene.load"));
+    const strength = options?.emissiveStrength;
+    if (strength !== void 0 && !(Number.isFinite(strength) && strength >= 0)) {
+      return Promise.reject(new OpenEngineError(
+        "InvalidArgument",
+        `scene.load('${url}'): emissiveStrength takes a finite number of 0 or more (1 shows the file's emission); got ${String(strength)}.`
+      ));
+    }
     const absolute = this.m_Host.resolveUrl(url);
-    const load = this.m_LoadQueue.then(() => this.startLoad(absolute, options?.onProgress));
+    const load = this.m_LoadQueue.then(() => this.startLoad(absolute, options?.onProgress, strength));
     this.m_LoadQueue = load.catch(() => void 0);
     return load;
   }
@@ -1130,6 +1270,11 @@ var SceneImpl = class {
       if (status !== AssetStatus.Ready) throw bridge.failure(`scene.load('${active.url}')`);
       const id = bridge.abi.ge_instantiate_model(active.handle, kInvalidEntity);
       if (id === kInvalidEntity) throw bridge.failure(`scene.load('${active.url}')`);
+      if (active.emissiveStrength !== void 0 && bridge.abi.ge_model_emissive_strength(active.handle, active.emissiveStrength) !== kOk) {
+        const error = bridge.failure(`scene.load('${active.url}')`);
+        bridge.abi.ge_entity_destroy(id);
+        throw error;
+      }
       active.resolve(this.entityFor(id));
     } catch (error) {
       this.m_ActiveLoad = null;
@@ -1161,7 +1306,7 @@ var SceneImpl = class {
    * that way: the engine fetches a URL once and reuses it, so a URL keeps the address the
    * engine first had it under, until a load of it fails.
    */
-  async startLoad(url, onProgress) {
+  async startLoad(url, onProgress, emissiveStrength) {
     const bridge = this.bridge;
     bridge.contract.checkAlive(`scene.load('${url}')`);
     let engineUrl = this.m_EngineUrls.get(url);
@@ -1181,7 +1326,7 @@ var SceneImpl = class {
     }
     this.m_EngineUrls.set(url, engineUrl);
     const loaded = new Promise((resolve, reject) => {
-      this.m_ActiveLoad = { handle, url, resolve, reject };
+      this.m_ActiveLoad = { handle, url, emissiveStrength, resolve, reject };
       this.m_Host.requestLoadPoll();
     });
     const settled = (failed) => {
@@ -1515,6 +1660,14 @@ var OrbitControlsImpl = class {
     const q = quatMultiply(quatFromAxisDegrees([0, 1, 0], 90 - this.m_Yaw), quatFromAxisDegrees([1, 0, 0], -this.m_Pitch));
     transform.quaternion.set(q.x, q.y, q.z, q.w);
   }
+  get pitch() {
+    return this.m_Pitch;
+  }
+  set pitch(degrees) {
+    if (!Number.isFinite(degrees)) throw new OpenEngineError("InvalidArgument", `OrbitControls.pitch takes a finite number of degrees, not ${degrees}.`);
+    this.m_Pitch = Math.max(-kPitchLimit, Math.min(kPitchLimit, degrees));
+    this.m_PitchDelta = 0;
+  }
   dispose() {
     for (const detach of this.m_Detach.splice(0)) detach();
   }
@@ -1576,6 +1729,7 @@ var OrbitControlsImpl = class {
 };
 export {
   Camera,
+  DDGIVolume,
   Engine,
   Light,
   LocalBounds,

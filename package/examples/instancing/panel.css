@@ -1,5 +1,7 @@
 /* The instancing page and its control panel: a dark translucent card over the scene. */
 html, body { margin: 0; height: 100%; background: #000; color: #eee; font: 13px/1.4 system-ui, sans-serif; }
+/* An element's own display never overrides its hidden attribute. */
+[hidden] { display: none !important; }
 canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .panel { position: fixed; top: 16px; right: 16px; width: 260px; padding: 12px 14px; box-sizing: border-box;
     background: rgba(20, 22, 28, 0.78); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.12);
@@ -16,7 +18,6 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
    page and apart from the sky, filled in the accent color (3.8:1 against the track). */
 .download { position: fixed; top: 0; left: 0; z-index: 1; display: block; width: 100%; height: 4px; margin: 0;
     border: 0; appearance: none; background: #555a64; }
-.download[hidden] { display: none; }
 .download::-webkit-progress-bar { background: transparent; }
 .download::-webkit-progress-value { background: #6cf; }
 .download::-moz-progress-bar { background: #6cf; }
@@ -27,7 +28,6 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 /* The status in the middle of the canvas until the first frame draws. */
 .canvas-status { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; color: #9aa3ad;
     font-size: 14px; pointer-events: none; }
-.canvas-status[hidden] { display: none; }
 .panel .summary-progress { font-weight: 400; color: #9aa3ad; }
 .panel kbd { font: 12px ui-monospace, monospace; padding: 0 4px; border: 1px solid #667; border-radius: 3px; }
 .fps { position: fixed; top: 16px; left: 16px; padding: 6px 10px; font: 12px ui-monospace, monospace;

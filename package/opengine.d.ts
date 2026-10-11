@@ -212,6 +212,16 @@ export interface SkyView {
     northHeading: number;
 }
 
+/** A mesh the engine builds in, for `scene.create({ mesh })`. */
+export type BuiltInMesh = 'plane' | 'cube' | 'sphere' | 'capsule';
+
+/** What `scene.create` makes. */
+export interface CreateOptions {
+    name?: string;
+    /** A built-in mesh the entity draws, with its MeshRenderer and LocalBounds. */
+    mesh?: BuiltInMesh;
+}
+
 /** The engine's world. */
 export interface Scene {
     /**
@@ -225,12 +235,63 @@ export interface Scene {
      * loaded reports nothing.
      */
     load(url: string, options?: LoadOptions): Promise<Model>;
-    /** Creates an empty entity with an identity transform. */
-    create(name?: string): Entity;
+    /**
+     * Creates an entity with an identity transform: empty, or named (a string, or `options.name`),
+     * or drawing a built-in mesh with the engine's default material (`options.mesh`). The meshes
+     * are unit-sized at the origin: the plane is 1 m square in XZ facing +Y, the cube and the
+     * sphere fit a 1 m box, the capsule is 1 m wide and 2 m tall; scale them through the transform.
+     */
+    create(nameOrOptions?: string | CreateOptions): Entity;
     /** The camera the canvas renders from. */
     readonly camera: Entity;
     readonly sun: SunView;
     readonly sky: SkyView;
+    /**
+     * The entities that have every component in `read` and in `options.write`, walked a chunk
+     * at a time with `forEachChunk`: one engine call per chunk of entities rather than one per
+     * entity per field. Make the query once and run it every frame. A component in `write` is
+     * written in place and the engine sees the write (a moved `Transform` moves the entity on
+     * the next frame); a component in `read` is handed out as a copy. Every entity a walk visits
+     * counts as changed in each `write` component, assigned or not, so list a component the page
+     * only reads in `read`. Name each component once; at most 16 components.
+     */
+    query(read: readonly ComponentType[], options?: { write?: readonly ComponentType[] }): Query;
+}
+
+/** A query over the entities that have a set of components (`scene.query`). */
+export interface Query {
+    /**
+     * Calls `visit` once for each chunk of entities the query matches. While it runs the world
+     * holds still: creating or destroying entities, adding or removing components, reparenting
+     * and `engine` frames are refused with an error; make them after `forEachChunk` returns.
+     */
+    forEachChunk(visit: (chunk: QueryChunk) => void): void;
+}
+
+/** Up to a chunk of the entities a query matches, as `forEachChunk` hands them to its callback. */
+export interface QueryChunk {
+    /** How many entities the chunk holds. */
+    readonly count: number;
+    /** The chunk's entity at `index` (0 to `count - 1`). */
+    entity(index: number): Entity;
+    /**
+     * The field `field` of `component` for every entity in the chunk, as 32-bit floats: element
+     * `k` of entity `i` is `values[offset + i * stride + k]`. For a component the query writes,
+     * `values` is the engine's own memory, and assigning to it changes the entities. For a
+     * component it reads, `values` is a copy. Valid until the callback returns or calls into the
+     * engine. The field must hold floats (`Float`, `Vec2`, `Vec3`, `Vec4`, `Quat`, `Color`, `Mat4`;
+     * a `Mat4` is column-major).
+     */
+    floats(component: ComponentType, field: string): FloatColumn;
+}
+
+/** Floats strided across a chunk's entities (`QueryChunk.floats`). */
+export interface FloatColumn {
+    readonly values: Float32Array;
+    /** The index of entity 0's first element. */
+    readonly offset: number;
+    /** Elements from one entity's field to the next's. */
+    readonly stride: number;
 }
 
 /**
@@ -277,6 +338,12 @@ export interface LoadProgress {
 export interface LoadOptions {
     /** Reports the model's download in the `'model'` phase. */
     onProgress?: (progress: LoadProgress) => void;
+    /**
+     * Multiplies the brightness of the model's emissive materials, 0 or more (default 1: as the
+     * file gives it). The materials belong to the URL, so every copy of the model shows the
+     * strength of its latest load.
+     */
+    emissiveStrength?: number;
 }
 
 /** The running engine. */
@@ -319,6 +386,12 @@ export interface OrbitControls {
     readonly target: Vector3;
     /** Meters from the target. */
     distance: number;
+    /**
+     * The camera's elevation over the target, degrees: negative looks down, held within ±89.
+     * Setting it drops any drag still settling toward another elevation. Throws InvalidArgument
+     * for a value that is not a finite number.
+     */
+    pitch: number;
     /** Meters. */
     minDistance: number;
     /** Meters. */

@@ -10,10 +10,11 @@ const kUnsignedExports = [
     'ge_animation_clips',
 ];
 const kSignedExports = [
-    'ge_tick', 'ge_update_assets', 'ge_resize', 'ge_asset_status',
-    'ge_entity_bounds', 'ge_entity_destroy', 'ge_entity_parent', 'ge_entity_children',
+    'ge_tick', 'ge_update_assets', 'ge_resize', 'ge_asset_status', 'ge_model_emissive_strength',
+    'ge_entity_bounds', 'ge_entity_destroy', 'ge_entity_parent', 'ge_entity_children', 'ge_entity_set_mesh',
     'ge_component_add', 'ge_component_remove', 'ge_component_has',
-    'ge_field_get', 'ge_field_set', 'ge_animation_play', 'ge_animation_pause',
+    'ge_field_get', 'ge_field_set', 'ge_query_begin', 'ge_query_next_chunk', 'ge_query_end',
+    'ge_animation_play', 'ge_animation_pause',
 ];
 
 /** Adapts an instantiated engine module to the Abi interface. */
