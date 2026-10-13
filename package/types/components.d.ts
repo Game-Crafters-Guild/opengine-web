@@ -46,6 +46,8 @@ export type FogGlowQuality = 'Fast' | 'Balanced' | 'High' | 'Cinematic';
 
 export type HeightFogAxisMode = 'WorldY' | 'WorldX' | 'WorldZ' | 'Custom';
 
+export type HeightFogColorMode = 'FixedColor' | 'SkyHorizon';
+
 export type HeightFogGradientMode = 'None' | 'Distance' | 'Height' | 'ScreenY' | 'MainLight';
 
 export type HeightFogLayerMode = 'Dominant' | 'Additive';
@@ -59,6 +61,8 @@ export type LightShadowTier = 'Inherit' | 'Low' | 'Medium' | 'High';
 export type LightType = 'Directional' | 'Point' | 'Spot' | 'Ambient' | 'Area' | 'Volume';
 
 export type LightUnit = 'Unitless' | 'Lux' | 'Lumen' | 'Candela';
+
+export type Look = 'Neutral' | 'Filmic' | 'Photographic';
 
 export type MarkupMemberMode = 'Include' | 'Exclude';
 
@@ -131,8 +135,6 @@ export type TerrainRuleConditionKind = 'SlopeDegrees' | 'SlopeNormalized' | 'Hei
 export type TerrainRuleFalloffCurve = 'ClampedLinear' | 'Smoothstep';
 
 export type TerrainVolumeShape = 'Rectangle' | 'Circle' | 'SplinePath' | 'SplineArea' | 'Global';
-
-export type TonemapMode = 'ACES' | 'Reinhard' | 'AgX' | 'Filmic' | 'Neutral' | 'Linear' | 'GranTurismo7' | 'ACES2';
 
 export type ValueCurveShapeMode = 'KeyCurve' | 'CubicBezier';
 
@@ -317,7 +319,6 @@ export declare const ChromaticAberrationEffect: ComponentType<ChromaticAberratio
 
 export interface ColorFilterEffect {
     enabled: boolean;
-    stackOrder: number;
     blendMode: ColorFilterBlendMode;
     color: [number, number, number];
     intensity: number;
@@ -354,7 +355,6 @@ export declare const ContrastAdaptiveSharpenEffect: ComponentType<ContrastAdapti
 
 export interface CrtEffect {
     enabled: boolean;
-    stackOrder: number;
     intensity: number;
     curvature: number;
     scanlines: number;
@@ -565,6 +565,7 @@ export interface HeightFogEffect {
     horizonHeightBlendEnd: number;
     axisMode: HeightFogAxisMode;
     customAxis: [number, number, number];
+    colorMode: HeightFogColorMode;
     emissive: [number, number, number];
     gradientMode: HeightFogGradientMode;
     gradientStrength: number;
@@ -1490,8 +1491,7 @@ export interface PostProcessVolume {
     isGlobal: boolean;
     shape: PostProcessVolumeShape;
     blendDistance: number;
-    tonemap: TonemapMode;
-    ditherMode: number;
+    look: Look;
     ictcpChromaCompression: number;
 }
 export declare const PostProcessVolume: ComponentType<PostProcessVolume>;

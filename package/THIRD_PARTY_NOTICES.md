@@ -15772,12 +15772,71 @@ THE SOFTWARE.
 
 ```
 
+## webview2 (vcpkg port, a dependency of the engine's wasm build)
+
+```
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * The name of Microsoft Corporation, or the names of its contributors 
+may not be used to endorse or promote products derived from this
+software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
 ## wgpu-native (vcpkg port, a dependency of the engine's wasm build)
 
 ```
 wgpu-native is dual-licensed MIT OR Apache-2.0.
 https://github.com/gfx-rs/wgpu-native/blob/trunk/LICENSE.MIT
 https://github.com/gfx-rs/wgpu-native/blob/trunk/LICENSE.APACHE
+
+```
+
+## wil (vcpkg port, a dependency of the engine's wasm build)
+
+```
+    MIT License
+
+    Copyright (c) Microsoft Corporation. All rights reserved.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE
 
 ```
 
@@ -16578,150 +16637,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ```
 
-## GT7 tone mapper (Includes/tonemap_gt7.glsl in the pack)
-
-```
-// Gran Turismo 7 tone mapping operator, ported to GLSL from Polyphony Digital's
-// reference implementation published with "Driving Toward Reality: Physically
-// Based Tone Mapping and Perceptual Fidelity in Gran Turismo 7" (SIGGRAPH 2025).
-// https://blog.selfshadow.com/publications/s2025-shading-course/pdi/supplemental/gt7_tone_mapping.cpp
-//
-// MIT License
-// Copyright (c) 2025 Polyphony Digital Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
-#ifndef GE_TONEMAP_GT7_GLSL
-#define GE_TONEMAP_GT7_GLSL
-
-// The published operator consumes linear Rec.2020. GameEngine's scene-linear
-// working space is Rec.709, so convert at the boundary and return Rec.709.
-const mat3 kGT7Rec709ToRec2020 = mat3(
-    0.6274040, 0.0690970, 0.0163916,
-    0.3292820, 0.9195400, 0.0880132,
-    0.0433136, 0.0113612, 0.8955950);
-const mat3 kGT7Rec2020ToRec709 = mat3(
-     1.6604910, -0.1245500, -0.0181510,
-    -0.5876410,  1.1329000, -0.1005790,
-    -0.0728500, -0.0083490,  1.1187300);
-
-float GT7InverseEotfSt2084(float value)
-{
-    const float m1 = 0.1593017578125;
-    const float m2 = 78.84375;
-    const float c1 = 0.8359375;
-    const float c2 = 18.8515625;
-    const float c3 = 18.6875;
-    // The reference convention is framebuffer 1.0 == 100 cd/m^2.
-    float y = max(value, 0.0) * 0.01;
-    float ym = pow(y, m1);
-    return exp2(m2 * (log2(c1 + c2 * ym) - log2(1.0 + c3 * ym)));
-}
-
-float GT7EotfSt2084(float signal)
-{
-    const float m1 = 0.1593017578125;
-    const float m2 = 78.84375;
-    const float c1 = 0.8359375;
-    const float c2 = 18.8515625;
-    const float c3 = 18.6875;
-    float np = pow(clamp(signal, 0.0, 1.0), 1.0 / m2);
-    float luminance = pow(max(np - c1, 0.0) / max(c2 - c3 * np, 1e-7), 1.0 / m1);
-    return luminance * 100.0;
-}
-
-vec3 GT7RgbToICtCp(vec3 rgb)
-{
-    vec3 lms = vec3(
-        dot(rgb, vec3(1688.0, 2146.0, 262.0)) / 4096.0,
-        dot(rgb, vec3(683.0, 2951.0, 462.0)) / 4096.0,
-        dot(rgb, vec3(99.0, 309.0, 3688.0)) / 4096.0);
-    vec3 pq = vec3(GT7InverseEotfSt2084(lms.x),
-                   GT7InverseEotfSt2084(lms.y),
-                   GT7InverseEotfSt2084(lms.z));
-    return vec3(
-        dot(pq, vec3(2048.0, 2048.0, 0.0)) / 4096.0,
-        dot(pq, vec3(6610.0, -13613.0, 7003.0)) / 4096.0,
-        dot(pq, vec3(17933.0, -17390.0, -543.0)) / 4096.0);
-}
-
-vec3 GT7ICtCpToRgb(vec3 ictcp)
-{
-    vec3 pqLms = vec3(
-        ictcp.x + 0.00860904 * ictcp.y + 0.11103 * ictcp.z,
-        ictcp.x - 0.00860904 * ictcp.y - 0.11103 * ictcp.z,
-        ictcp.x + 0.560031 * ictcp.y - 0.320627 * ictcp.z);
-    vec3 lms = vec3(GT7EotfSt2084(pqLms.x),
-                    GT7EotfSt2084(pqLms.y),
-                    GT7EotfSt2084(pqLms.z));
-    return max(vec3(
-        dot(lms, vec3(3.43661, -2.50645, 0.0698454)),
-        dot(lms, vec3(-0.79133, 1.9836, -0.192271)),
-        dot(lms, vec3(-0.0259499, -0.0989137, 1.12486))), vec3(0.0));
-}
-
-float GT7Curve(float x)
-{
-    // SDR initialization from the reference: a 250 nit target, with 1.0 scene
-    // linear representing 100 nits. These are the precomputed curve constants.
-    const float peak = 2.5;
-    const float midpoint = 0.538;
-    const float linearSection = 0.444;
-    const float toeStrength = 1.280;
-    const float kA = 2.963333333333334;
-    const float kB = -3.3733512380644313;
-    const float kC = -0.539568345323741;
-    x = max(x, 0.0);
-    float shoulder = kA + kB * exp(x * kC);
-    if (x >= linearSection * peak)
-        return shoulder;
-    float weightLinear = smoothstep(0.0, midpoint, x);
-    float toeMapped = midpoint * pow(x / midpoint, toeStrength);
-    return mix(toeMapped, x, weightLinear);
-}
-
-vec3 TonemapGranTurismo7(vec3 sceneRec709)
-{
-    vec3 rgb = kGT7Rec709ToRec2020 * max(sceneRec709, vec3(0.0));
-    vec3 sourceICtCp = GT7RgbToICtCp(rgb);
-
-    vec3 skewedRgb = vec3(GT7Curve(rgb.r), GT7Curve(rgb.g), GT7Curve(rgb.b));
-    vec3 skewedICtCp = GT7RgbToICtCp(skewedRgb);
-
-    // ICtCp intensity for neutral 2.5 (the 250 nit SDR target).
-    const float targetIntensity = 0.6025591549907509;
-    float chromaScale = 1.0 - smoothstep(0.98, 1.16,
-                                        sourceICtCp.x / targetIntensity);
-    vec3 scaledICtCp = vec3(skewedICtCp.x,
-                            sourceICtCp.yz * chromaScale);
-    vec3 scaledRgb = GT7ICtCpToRgb(scaledICtCp);
-
-    // Reference blend ratio is 0.6. The 0.4 correction converts its 250 nit
-    // SDR convention back to display-linear [0,1] for the terminal sRGB OETF.
-    vec3 mappedRec2020 = min(mix(skewedRgb, scaledRgb, 0.6), vec3(2.5)) * 0.4;
-    return clamp(kGT7Rec2020ToRec709 * mappedRec2020, 0.0, 1.0);
-}
-
-#endif
-
-```
-
 ## OpenColorIO (the ACES 2 tone mapper tables)
 
 ```
@@ -16751,33 +16666,6 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-```
-
-## BakingLab ACES
-
-```
-MIT License
-
-Copyright (c) 2016 MJP
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 
 ```
 
@@ -28827,7 +28715,7 @@ Every asset an example uses, with its source and license. Sample models are load
 | ABeautifulGame.glb (42.98 MB) | `model-viewer` | [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/ABeautifulGame): MaterialX Project, © 2020 ASWF (original model); © 2022 Ed Mackey (glTF conversion) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the page shows the credit while the model is on screen. Two of its fifteen materials use transmission and volume, which the importer does not implement: those pieces draw opaque |
 | floor.glb (20 KB, committed beside the page) | `model-viewer` | Generated by `Tools/Web/make_viewer_floor.py` in this repository: a 1 m mid-grey disc, opaque in the middle and in a ring around it fading out (alpha blended); the fade is its only texture | MIT, the repository's `LICENSE` |
 | `coi-serviceworker.js` 0.1.7 (in the package root) | every example | [coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker), Guido Zuidhof | MIT, `../coi-serviceworker.LICENSE` |
-| `moon_full.png` (`Assets/Textures/Sky/MoonPhases/`, in the engine pack) | every example: the sky draws it | [NASA's Scientific Visualization Studio](https://svs.gsfc.nasa.gov/5048), "Moon Phase and Libration, 2023" (SVS 5048), frame `phase_full.1571.tif`; credit "NASA's Scientific Visualization Studio". Keyed to alpha, cropped and resampled; the conversion is recorded in `Assets/Textures/Sky/MoonPhases/README.md` | Public domain (NASA imagery) |
+| `moon_full.png` (`Engine/Assets/Textures/Sky/MoonPhases/`, in the engine pack) | every example: the sky draws it | [NASA's Scientific Visualization Studio](https://svs.gsfc.nasa.gov/5048), "Moon Phase and Libration, 2023" (SVS 5048), frame `phase_full.1571.tif`; credit "NASA's Scientific Visualization Studio". Keyed to alpha, cropped and resampled; the conversion is recorded in `Engine/Assets/Textures/Sky/MoonPhases/README.md` | Public domain (NASA imagery) |
 
 ## The two helmets: single-file copies
 
