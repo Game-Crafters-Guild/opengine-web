@@ -562,9 +562,9 @@ var Bridge = class {
 };
 
 // src/build-stamp.ts
-var kPackageVersion = "2026.10.0-alpha.4";
+var kPackageVersion = "2026.10.0-alpha.5";
 var kReflectionFingerprint = null;
-var kCoreWasmBytes = { st: 22063397, mt: 23703996 };
+var kCoreWasmBytes = { st: 22098420, mt: 23739860 };
 
 // src/components.ts
 var ComponentToken = class {

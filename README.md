@@ -3,7 +3,7 @@
 Live examples and builds of `@game-crafters-guild/openengine-web`: a WebGPU renderer (clustered lighting, cascaded shadows, a physical sky) and an entity-component world behind a small JavaScript API, running in the browser.
 
 - **The examples**: https://game-crafters-guild.github.io/opengine-web/. They need WebGPU: use a current Chrome or Edge.
-- **Early access (alpha)**: the engine and its API change between releases; this site serves `@game-crafters-guild/openengine-web` 2026.10.0-alpha.4, built from engine commit 3a6c982733.
+- **Early access (alpha)**: the engine and its API change between releases; this site serves `@game-crafters-guild/openengine-web` 2026.10.0-alpha.5, built from engine commit 4c8fc29b8e ([Game-Crafters-Guild/OpenEngine](https://github.com/Game-Crafters-Guild/OpenEngine), release v2026.10.0-alpha.5).
 - **The package**: `package/` holds the library as a page imports it:
   - `opengine.mjs`, its declarations and `types/`;
   - the engine module in two builds, `opengine-core.st` (single-threaded) and `opengine-core.mt` (threaded);
