@@ -562,9 +562,9 @@ var Bridge = class {
 };
 
 // src/build-stamp.ts
-var kPackageVersion = "2026.10.0-alpha.5";
+var kPackageVersion = "2026.10.0-alpha.6";
 var kReflectionFingerprint = null;
-var kCoreWasmBytes = { st: 22098420, mt: 23739860 };
+var kCoreWasmBytes = { st: 22687852, mt: 24334060 };
 
 // src/components.ts
 var ComponentToken = class {
@@ -608,6 +608,10 @@ function browserHost() {
       return () => observer.disconnect();
     },
     devicePixelRatio: () => window.devicePixelRatio || 1,
+    isMobile: () => {
+      const userAgentData = navigator.userAgentData;
+      return userAgentData?.mobile === true || /Android|iPhone|iPad|iPod/.test(navigator.userAgent) || /Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+    },
     crossOriginIsolated: () => globalThis.crossOriginIsolated === true,
     hasWebGPU: () => "gpu" in navigator && navigator.gpu !== void 0,
     resolveUrl: (url) => new URL(url, document.baseURI).href,
@@ -1426,6 +1430,7 @@ function selectBuild(threads, crossOriginIsolated) {
   }
   return crossOriginIsolated ? { build: "mt", reason: "the page is cross-origin isolated" } : { build: "st", reason: "the page is not cross-origin isolated (no COOP/COEP headers or service worker)" };
 }
+var kMobileDrawingBufferPixels = 1e6;
 var g_CanvasCount = 0;
 function canvasSelector(canvas) {
   if (!canvas.id) canvas.id = `opengine-canvas-${++g_CanvasCount}`;
@@ -1443,10 +1448,12 @@ var EngineImpl = class {
   /** A load poll scheduled on its own because the engine is not running. */
   m_PendingPoll = null;
   m_Unsubscribe = [];
-  constructor(bridge, host, canvas) {
+  m_MaxDrawingBufferPixels;
+  constructor(bridge, host, canvas, maxDrawingBufferPixels) {
     this.bridge = bridge;
     this.m_Host = host;
     this.m_Canvas = canvas;
+    this.m_MaxDrawingBufferPixels = maxDrawingBufferPixels ?? (host.isMobile() ? kMobileDrawingBufferPixels : Number.POSITIVE_INFINITY);
     this.scene = new SceneImpl(this);
   }
   resolveUrl(url) {
@@ -1464,11 +1471,11 @@ var EngineImpl = class {
     sky.set(SkyEnvironment, { sunLight: sun });
     this.scene.setDefaults({ camera, sun: new SunViewImpl(sun), sky: new SkyViewImpl(sky) });
   }
-  /** Starts tracking the canvas size and the tab's visibility. */
+  /** Sizes the drawing buffer, then starts tracking the canvas size and the tab's visibility. */
   attach() {
+    this.resize();
     this.m_Unsubscribe.push(this.m_Host.observeResize(this.m_Canvas, () => this.resize()));
     this.m_Unsubscribe.push(this.m_Host.onVisibilityChange(() => this.reschedule()));
-    this.resize();
   }
   run() {
     this.bridge.contract.checkAlive("engine.run");
@@ -1487,8 +1494,14 @@ var EngineImpl = class {
     this.m_FrameCallbacks.add(callback);
     return () => this.m_FrameCallbacks.delete(callback);
   }
+  /** Sizes the drawing buffer to the canvas's CSS size times the pixel ratio, within the pixel cap. */
   resize() {
-    const code = this.bridge.abi.ge_resize(this.m_Canvas.clientWidth, this.m_Canvas.clientHeight, this.m_Host.devicePixelRatio());
+    const width = this.m_Canvas.clientWidth;
+    const height = this.m_Canvas.clientHeight;
+    const devicePixelRatio = this.m_Host.devicePixelRatio();
+    const fitting = Math.sqrt(this.m_MaxDrawingBufferPixels / Math.max(1, width * height));
+    const ratio = Math.min(devicePixelRatio, fitting);
+    const code = this.bridge.abi.ge_resize(width, height, ratio);
     this.bridge.check(code, "engine.resize");
   }
   async dispose() {
@@ -1558,12 +1571,30 @@ var EngineImpl = class {
     else this.m_Host.clearTimeout(pending.handle);
   }
 };
+function checkDrawingBufferCap(maxDrawingBufferPixels) {
+  if (maxDrawingBufferPixels === void 0) return;
+  if (typeof maxDrawingBufferPixels !== "number" || Number.isNaN(maxDrawingBufferPixels) || maxDrawingBufferPixels <= 0) {
+    throw new OpenEngineError(
+      "InvalidArgument",
+      `maxDrawingBufferPixels takes a number of pixels above 0, or Infinity for no limit (got ${String(maxDrawingBufferPixels)}); leave it out for the default: 1,000,000 on a phone or tablet, no limit elsewhere.`
+    );
+  }
+}
+function checkCanvasShown(canvas) {
+  if (canvas.clientWidth > 0 && canvas.clientHeight > 0) return;
+  throw new OpenEngineError(
+    "InvalidArgument",
+    `The canvas measures ${canvas.clientWidth} x ${canvas.clientHeight} CSS pixels: it is hidden (display: none, or inside a hidden element) or has no size. Show it before Engine.create, or call Engine.create once it is shown.`
+  );
+}
 async function createEngine(options, host, loadCore, stamp) {
+  checkDrawingBufferCap(options.maxDrawingBufferPixels);
   if (!host.hasWebGPU()) {
     throw new OpenEngineError("NoWebGPU", "This browser has no WebGPU. Use a current Chrome or Edge, or Safari or Firefox with WebGPU enabled.");
   }
   const { build, reason } = selectBuild(options.threads ?? "auto", host.crossOriginIsolated());
   host.log(`OpenEngine: using the ${build === "mt" ? "threaded" : "single-threaded"} build because ${reason}.`);
+  checkCanvasShown(options.canvas);
   const bridge = new Bridge(await loadCore(build, options.canvas, downloadTracker(options.onProgress)));
   const selector = canvasSelector(options.canvas);
   const code = await bridge.contract.suspend("ge_create", () => bridge.abi.ge_create(bridge.writeString(selector), 0));
@@ -1571,9 +1602,14 @@ async function createEngine(options, host, loadCore, stamp) {
   const json = bridge.loadReflection();
   checkRelease(json, bridge.reflection.engineVersion, stamp);
   bindComponentTokens(bridge.reflection);
-  const engine = new EngineImpl(bridge, host, options.canvas);
-  engine.createDefaultWorld();
-  engine.attach();
+  const engine = new EngineImpl(bridge, host, options.canvas, options.maxDrawingBufferPixels);
+  try {
+    engine.createDefaultWorld();
+    engine.attach();
+  } catch (error) {
+    await engine.dispose();
+    throw error;
+  }
   return engine;
 }
 function defaultCoreUrl() {

@@ -26,12 +26,10 @@ const kTruckCredit = [['Cesium Milk Truck', `${kKhronos}/CesiumMilkTruck`], [': 
 const kCcByNc = ['CC BY‑NC 4.0', 'https://creativecommons.org/licenses/by-nc/4.0/'];
 const kDamagedHelmetCredit = [['Damaged Helmet', `${kKhronos}/DamagedHelmet`], [': © 2018 ctxwing, '], kCcBy,
     [' (rebuild and conversion);'], ['\n'], ['© 2016 theblueturtle_, '], kCcByNc, [' (the model; non-commercial).']];
-const kChessCredit = [['A Beautiful Game', `${kKhronos}/ABeautifulGame`], [': © 2020 ASWF and © 2022 Ed Mackey, '],
-    kCcBy, ['.']];
 /** [name, url, megabytes of the download (shown in the list and while it loads), credit or note shown with the model,
  * how the page shows it (main.js: `pitch`, the orbit's starting elevation, negative looking down; `yaw`, the model's starting
  * turn on the turntable; degrees; `emissiveStrength`, a multiple of the file's emission, so that it reads in daylight at
- * +2 EV without clipping)];
+ * 0 EV without clipping)];
  * the first opens with the page, playing its first clip. */
 const kSamples = [
     ['Fox', sample('Fox.glb'), 0, kFoxCredit],
@@ -39,7 +37,6 @@ const kSamples = [
     ['SciFi helmet', onSite('SciFiHelmet.glb'), 30],
     ['Flight helmet', onSite('FlightHelmet.glb'), 48, kOpaqueGlass],
     ['Damaged helmet', sample('DamagedHelmet.glb'), 4, kDamagedHelmetCredit, { pitch: -20, yaw: 35, emissiveStrength: 256 }],   // its face toward the camera
-    ['Chess set', sample('ABeautifulGame.glb'), 43, [...kChessCredit, [' '], ...kOpaqueGlass]],
     ['Lantern', sample('Lantern.glb'), 0, kOpaqueGlass, { emissiveStrength: 128 }],
     ['Antique camera', sample('AntiqueCamera.glb')],
     ['Boom box', sample('BoomBox.glb')],
@@ -87,8 +84,7 @@ function writePieces(element, pieces) {
  *     setStage: (part: 'floor' | 'gi', on: boolean) => Promise<void>, play: (clip: string, speed: number) => void, pause: () => void,
  *     reframe: () => void }} callbacks
  *     `show` stands the model by `look` (the sample's entry) and resolves to its clip names; `exposure` is the starting
- *     compensation in stops (the camera meters the whole frame, so at 0 a model under the daylight sky reads darker than
- *     the eye sees it); `reframe` fits the model to the area the panel
+ *     compensation in stops (the camera keys the scene's geometry to middle gray); `reframe` fits the model to the area the panel
  *     and the overlays leave free after the panel opens or closes, or the credit or the readout changes,
  *     keeping the visitor's zoom.
  * @returns {{ frame: (dt: number) => void, turning: () => boolean }} what the page calls each frame,
@@ -217,7 +213,6 @@ export function controlPanel(page, { show, timeOfDay, setTimeOfDay, exposure, se
     slider.value = String(timeOfDay);
     slider.addEventListener('input', () => { setTime(Number(slider.value)); settle(); });
     exposureSlider.value = String(exposure);
-    if (exposure !== 0) exposureSlider.list.append(new Option('', String(exposure)));
     exposureSlider.addEventListener('input', () => { setStops(Number(exposureSlider.value)); settle(); });
     fpsButton.addEventListener('click', toggleFps);
     const turntable = field('turn');

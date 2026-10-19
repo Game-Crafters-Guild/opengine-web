@@ -10,6 +10,8 @@ export type AnimatorGraphParamKind = 'Float' | 'Bool' | 'Trigger';
 
 export type AreaLightShape = 'Rectangle' | 'Disc' | 'Sphere' | 'Cylinder';
 
+export type AudioEmitterAttenuation = 'None' | 'Inverse' | 'Linear' | 'Exponential';
+
 export type CameraSensorPreset = 'Custom' | 'Standard8' | 'Super8' | 'Film16' | 'Super16' | 'Film35TwoPerf' | 'Film35ThreePerf' | 'Film35Academy' | 'Super35' | 'Film65FivePerf' | 'Imax15Perf' | 'MicroFourThirds' | 'ApsC' | 'FullFrame' | 'MediumFormat4433' | 'MediumFormat5440' | 'ArriAlexa35' | 'ArriAlexaLF' | 'ArriAlexa65';
 
 export type ColorFilterBlendMode = 'Multiply' | 'Add' | 'Screen' | 'SoftLight';
@@ -35,6 +37,8 @@ export type DirectionalShadowFilter = 'Grid5x5' | 'Grid3x3' | 'PoissonPCF' | 'PC
 export type DirectionalShadowMode = 'Cascades' | 'RayTraced';
 
 export type DofSamplingQuality = 'Performance' | 'Balanced' | 'Quality';
+
+export type ExposureMeter = 'Picture' | 'Lights';
 
 export type ExposureMode = 'Fixed' | 'Manual' | 'Physical' | 'Auto';
 
@@ -127,6 +131,12 @@ export type SplineWallCorner = 'Mitre' | 'Round';
 export type SplineWallGrade = 'Racked' | 'Stepped';
 
 export type SssrSampleQuality = 'Low' | 'Medium' | 'High';
+
+export type StarObserverKind = 'Eye' | 'Camera';
+
+export type StarShapeKind = 'Point' | 'Sparkle';
+
+export type TerrainGrassPreset = 'Custom' | 'Meadow' | 'Lawn' | 'Steppe';
 
 export type TerrainGrassRenderMode = 'Dither' | 'Blend';
 
@@ -225,6 +235,10 @@ export interface AudioEmitter {
     bus: number;
     volume: number;
     pitch: number;
+    attenuation: AudioEmitterAttenuation;
+    minDistance: number;
+    maxDistance: number;
+    rolloff: number;
 }
 export declare const AudioEmitter: ComponentType<AudioEmitter>;
 
@@ -269,12 +283,12 @@ export interface Camera {
     orthographicSize: number;
     nearZ: number;
     farZ: number;
-    cullingMask: number;
+    visibleLayers: number;
     postProcessProfileId: number;
     msaaSamples: number;
     antiAliasing: number;
     renderScale: number;
-    postProcessMask: number;
+    volumeLayers: number;
     exposureControl: ExposureMode;
     exposure: number;
     manualExposureEV: number;
@@ -295,6 +309,7 @@ export interface Camera {
     autoExposureMaxEv: number;
     autoExposureSpeedUp: number;
     autoExposureSpeedDown: number;
+    autoExposureMeter: ExposureMeter;
     aspectPreset: number;
     customAspectWidth: number;
     customAspectHeight: number;
@@ -686,7 +701,7 @@ export interface MeshRenderer {
     meshGpuHandleId: bigint;
     materialAssetGuid: AssetRef;
     modelAssetGuid: AssetRef;
-    renderLayerMask: number;
+    renderLayers: number;
     castShadows: boolean;
     receiveShadows: boolean;
     motionVectors: boolean;
@@ -784,7 +799,7 @@ export interface OceanDepthCacheSource {
     cacheRevision: number;
     bakeWidth: number;
     bakeHeight: number;
-    renderLayerMask: number;
+    sourceLayers: number;
     bakeOnlyMeshDepthContributors: boolean;
     bakeLoadMissingAssets: boolean;
     bakeIncludeDisabledRenderers: boolean;
@@ -903,7 +918,7 @@ export interface OceanHeightInput {
 export declare const OceanHeightInput: ComponentType<OceanHeightInput>;
 
 export interface OceanMeshDepthContributor {
-    renderLayerMask: number;
+    contributorLayers: number;
     extentPadding: number;
     depthBias: number;
     minDepth: number;
@@ -978,7 +993,7 @@ export interface OceanRenderer {
     maxActiveDepthCaches: number;
     rasterDepthCapture: boolean;
     rasterDepthCaptureResolution: number;
-    rasterDepthCaptureRenderLayerMask: number;
+    rasterDepthCaptureLayers: number;
     rasterDepthCaptureSizeX: number;
     rasterDepthCaptureSizeZ: number;
     rasterDepthCaptureTopPadding: number;
@@ -1071,7 +1086,7 @@ export interface OceanSurface {
     sprayUpVelocity: number;
     sprayWindVelocityScale: number;
     sprayOpacity: number;
-    sprayRenderLayerMask: number;
+    sprayRenderLayers: number;
     sprayGeometryIntersections: boolean;
     sprayIntersectionSpawnRate: number;
     sprayIntersectionBand: number;
@@ -1412,8 +1427,8 @@ export interface ParticleRenderer {
     drawOrder: ParticleDrawOrder;
     /** Meshes each particle draws, first submesh of each; none draws a sprite */
     meshes: AssetRef[];
-    /** View layers that draw the particles */
-    renderLayerMask: number;
+    /** The render layers the particles are on */
+    renderLayers: number;
     /**
      * Distance from the camera in metres at which particles begin to thin out
      * Minimum: 0.
@@ -1487,12 +1502,13 @@ export declare const PolyhavenPlaceholder: ComponentType<PolyhavenPlaceholder> &
 export interface PostProcessVolume {
     weight: number;
     priority: number;
-    postProcessMask: number;
+    volumeLayers: number;
     isGlobal: boolean;
     shape: PostProcessVolumeShape;
     blendDistance: number;
     look: Look;
-    ictcpChromaCompression: number;
+    nightTintStrength: number;
+    nightTintColor: [number, number, number];
 }
 export declare const PostProcessVolume: ComponentType<PostProcessVolume>;
 
@@ -1513,14 +1529,10 @@ export interface ReflectionProbe {
     /** Minimum: 0. */
     realtimeUpdateInterval: number;
     maxDistance: number;
-    cullMask: number;
+    /** The render layers the probe's capture draws */
+    capturedLayers: number;
 }
 export declare const ReflectionProbe: ComponentType<ReflectionProbe>;
-
-export interface RenderLayer {
-    mask: number;
-}
-export declare const RenderLayer: ComponentType<RenderLayer>;
 
 export interface RuntimeOnlyEntity {
     active: boolean;
@@ -1584,7 +1596,6 @@ export declare const SkeletonRef: ComponentType<SkeletonRef>;
 
 export interface SkinnedMeshRenderer {
     meshId: number;
-    renderLayerMask: number;
     castShadows: boolean;
     receiveShadows: boolean;
 }
@@ -1630,7 +1641,6 @@ export interface SkyEnvironment {
     sunSize: number;
     sunSize2D: number;
     skyPan2D: number;
-    moonPhase01: number;
     moonArcPosition: number;
     autoMoonArc: boolean;
     moonCycleDays: number;
@@ -1645,14 +1655,16 @@ export interface SkyEnvironment {
     fallingStarThickness: number;
     fallingStarDotSize: number;
     fallingStarDotSize2D: number;
-    starDensity: number;
-    starBrightness: number;
-    starSize: number;
-    starDiamondShape: number;
-    starCoreSize: number;
-    starGlowFalloff: number;
-    twinkleSpeed: number;
-    twinkleIntensity: number;
+    starLimitingMagnitude: number;
+    starTwinkleAmount: number;
+    starHighlightCompression: number;
+    starGlow: number;
+    starTwinkleRate: number;
+    starObserver: StarObserverKind;
+    starCoreScale: number;
+    starSpikes: number;
+    starSpikeLength: number;
+    starShape: StarShapeKind;
 }
 export declare const SkyEnvironment: ComponentType<SkyEnvironment>;
 
@@ -1823,6 +1835,7 @@ export declare const SplineWall: ComponentType<SplineWall>;
 
 export interface TerrainGrass {
     renderMode: TerrainGrassRenderMode;
+    preset: TerrainGrassPreset;
     bladesPerSquareMeter: number;
     range: number;
     densityFalloff: number;
@@ -1830,10 +1843,14 @@ export interface TerrainGrass {
     clumpSize: number;
     clumpHeightVariance: number;
     clumpAlignment: number;
-    clumpGather: number;
+    clumpTaper: number;
     bladeHeight: number;
     bladeWidth: number;
-    maxWidthRatio: number;
+    bladeTilt: number;
+    bladeBend: number;
+    bladeTwist: number;
+    bladeTaperStart: number;
+    tuftFan: number;
     bladeSegments: number;
     randomScale: number;
     layerIndex: number;
@@ -1849,12 +1866,10 @@ export interface TerrainGrass {
     brightness: number;
     randomBrightness: number;
     hueVariation: number;
-    rootShade: number;
     rootFadeStart: number;
     rootFadeEnd: number;
-    bladeNormalForm: number;
-    bladeScatterGain: number;
     groundingStrength: number;
+    canopyShade: number;
     translucency: number;
     textureGrass: boolean;
     textureCardsPerSquareMeter: number;
@@ -2111,7 +2126,6 @@ export interface WindVolume {
     blendDistance: number;
     weight: number;
     priority: number;
-    layerMask: number;
     directionX: number;
     directionY: number;
     directionZ: number;
