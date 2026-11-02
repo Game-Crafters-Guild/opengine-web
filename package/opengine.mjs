@@ -562,9 +562,9 @@ var Bridge = class {
 };
 
 // src/build-stamp.ts
-var kPackageVersion = "2026.10.0-alpha.6";
+var kPackageVersion = "2026.11.0-alpha.2";
 var kReflectionFingerprint = null;
-var kCoreWasmBytes = { st: 22687852, mt: 24334060 };
+var kCoreWasmBytes = { st: 25416067, mt: 27056758 };
 
 // src/components.ts
 var ComponentToken = class {
@@ -1171,7 +1171,7 @@ var EntityImpl = class _EntityImpl {
   readParent() {
     const parent = this.component("Parent");
     if (!this.hasInfo(parent)) return null;
-    return this.readField(parent, "parent");
+    return this.readField(parent, "entity");
   }
   readChildren() {
     this.assertAlive();

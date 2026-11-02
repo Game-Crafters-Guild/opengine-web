@@ -98,6 +98,9 @@ export declare const LocalBounds: ComponentType<LocalBounds>;
 // ---------------------------------------------------------------------------------------
 // MeshRenderer (Components/Rendering/MeshRenderer.h).
 
+/** Which passes draw the mesh: color only, color and shadows, or shadows only. */
+export type ShadowCasting = 'Off' | 'On' | 'ShadowsOnly';
+
 export interface MeshRenderer {
     /** Submesh index within the source model. */
     meshId: number;
@@ -109,7 +112,7 @@ export interface MeshRenderer {
     modelAssetGuid: AssetRef;
     /** The render layers this mesh is on; bit i is layer i. */
     renderLayers: number;
-    castShadows: boolean;
+    shadowCasting: ShadowCasting;
     receiveShadows: boolean;
     motionVectors: boolean;
 }
@@ -258,7 +261,7 @@ export interface DDGIVolume {
     /** 'Adaptive' moves probes out of geometry and switches off the ones that stay buried. */
     probePlacement: DDGIProbePlacement;
     /** Probes along the grid's longest axis, 2..32; cost grows roughly with its cube. */
-    probesLongAxis: number;
+    divisions: number;
     /** Rays per probe per update, 32..256. */
     raysPerProbe: number;
     /** Multiplier on the indirect light the volume adds. */
@@ -266,7 +269,7 @@ export interface DDGIVolume {
     /** 0: one bounce; about 1: full multi-bounce. */
     bounceIntensity: number;
     /** How much sky light probe rays that hit nothing pick up; 1 is the sky's own brightness. */
-    skyIntensity: number;
+    skyLight: number;
     /** 'Cascaded2' adds a finer grid over the middle of the volume at about twice the cost. */
     cascades: DDGICascadeMode;
     /** Reflections from the probes on metals and smooth surfaces. */

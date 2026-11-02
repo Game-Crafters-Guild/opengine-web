@@ -1,7 +1,7 @@
 {
   "file": "opengine-core.gepak",
-  "bytes": 310060834,
-  "fnv1a64": "0x3b700505979c4621",
+  "bytes": 309738703,
+  "fnv1a64": "0xa5b91f1c524b5e9f",
   "parts": [
     {
       "file": "opengine-core.gepak.part0",
@@ -17,7 +17,7 @@
     },
     {
       "file": "opengine-core.gepak.part3",
-      "bytes": 11216674
+      "bytes": 10894543
     }
   ]
 }
